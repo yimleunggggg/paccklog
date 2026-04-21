@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PACKLOG 行前志 V1
 
-## Getting Started
+PACKLOG 行前志是一个场景化出行装备清单应用（Next.js + Supabase + Vercel）。
 
-First, run the development server:
+## 需求文档
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- 产品需求主文档：`packlog-prd-v1.md`
+- 本仓库后续功能迭代统一以该文档为准
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 当前 V1 能力
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Supabase 邮箱验证码登录
+- 邮箱密码登录（开发应急，绕开发信限流）
+- 行程创建（多场景模板叠加）
+- 模板物品去重生成行程清单
+- 清单按分类/容器视图查看与状态更新
+- 参考收藏（link/note）
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 本地启动
 
-## Learn More
+1. 安装依赖
+   ```bash
+   npm install
+   ```
+2. 配置环境变量（`.env.local`）
+   ```bash
+   NEXT_PUBLIC_SUPABASE_URL=your_project_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+   NEXT_PUBLIC_SITE_URL=http://localhost:3000
+   ```
+3. 启动开发环境
+   ```bash
+   npm run dev
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+## 数据库迁移与同步
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- 首次建表 SQL：`supabase/migrations/20260421073000_init_v1.sql`
+- 推荐同步流程：
+  1. 开发期使用 MCP `execute_sql` 快速试验
+  2. 稳定后把改动整理为 migration 文件并提交
+  3. 生产环境只通过 migration 回放，避免手工改表漂移
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 部署到 Vercel
 
-## Deploy on Vercel
+1. 导入 Git 仓库到 Vercel
+2. 配置环境变量：
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_SITE_URL`（生产域名）
+3. 在 Supabase Auth URL 配置里加入：
+   - Site URL（Vercel 生产域名）
+   - Redirect URL：`https://your-domain.com/auth/callback`
+4. 每次合并前执行：
+   ```bash
+   npm run lint && npm run build
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 目录约定
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/app`: 页面与路由
+- `src/features`: 业务动作与逻辑
+- `src/entities`: 核心领域类型
+- `src/shared`: 配置与共享工具
+- `supabase/migrations`: 数据库迁移脚本

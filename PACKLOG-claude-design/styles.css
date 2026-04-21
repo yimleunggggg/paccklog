@@ -1,0 +1,285 @@
+/* ─────────────────────────────────────────────────────────
+   PACKLOG — Design System  (v2 · tightened)
+   ───────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@400;500;600&family=Noto+Serif+SC:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+:root {
+  /* backgrounds */
+  --paper:   #F4F1EC;
+  --paper2:  #ECE7DC;
+  --paper3:  #D6CFBF;
+  --paper4:  #B8B0A0;
+
+  /* brand green */
+  --forest:  #243D1F;
+  --forest2: #3A5C33;
+  --forest3: #6B9460;
+  --forest4: #B8D4AD;
+  --forest5: #E8F2E4;
+
+  /* ink */
+  --ink:  #1C1C18;
+  --ink2: #4A4840;
+  --ink3: #8C8880;
+  --ink4: #B8B4AC;
+
+  /* amber */
+  --amber:  #9B6A2A;
+  --amberL: #F5ECD8;
+
+  --cream: #FEFCF8;
+
+  /* Only TWO families: one display serif (Latin), one sans (Latin + CJK).
+     CJK rendering of Fraunces falls back through font-stack to Noto Serif SC. */
+  --serif: 'Fraunces', 'Noto Serif SC', Georgia, serif;
+  --sans: 'Inter', 'Noto Sans SC', -apple-system, sans-serif;
+  --cjk-display: 'Noto Serif SC', serif;
+  --cjk-sans: 'Noto Sans SC', sans-serif;
+}
+
+/* Variant: ink theme */
+[data-theme="ink"] {
+  --forest:  #1C1C18;
+  --forest2: #2E2B25;
+  --forest3: #6B675E;
+  --forest4: #B8B4AC;
+  --forest5: #EDE8DF;
+}
+/* Variant: burgundy */
+[data-theme="burgundy"] {
+  --forest:  #3A1F1F;
+  --forest2: #5C2F2F;
+  --forest3: #9E6B6B;
+  --forest4: #D4B8B8;
+  --forest5: #F2E4E4;
+}
+
+/* Variant: serif style */
+[data-serif="eb"]        { --serif: 'EB Garamond', 'Noto Serif SC', serif; }
+[data-serif="cormorant"] { --serif: 'Cormorant Garamond', 'Noto Serif SC', serif; }
+[data-serif="source"]    { --serif: 'Source Serif Pro', 'Noto Serif SC', serif; }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ——— TYPE PRIMITIVES ————————————————————————————————— */
+
+/* Display — used for Latin numerals, big numbers, editorial headlines */
+.display {
+  font-family: var(--serif);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.display-italic {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+/* CJK display — for Chinese headlines. Do NOT italicize. */
+.cjk-display {
+  font-family: var(--cjk-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Label — the single micro-typography style.
+   Replaces JetBrains Mono + eyebrow. Use sparingly. */
+.label {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.label-green { color: var(--forest3); }
+
+/* Editorial hero number — for giant percentages, day counts */
+.hero-num {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+}
+
+/* Magazine section divider — unobtrusive */
+.mag-rule {
+  height: 0.5px;
+  background: var(--paper3);
+  border: none;
+  margin: 0;
+}
+
+/* ——— UTILITIES ————————————————————————————————— */
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+/* Tick progress spine */
+.progress-spine {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  align-items: stretch;
+}
+.progress-spine .tick {
+  flex: 1;
+  background: rgba(255,255,255,.12);
+}
+.progress-spine .tick.on {
+  background: var(--forest4);
+}
+
+/* Common button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  border: none;
+  cursor: pointer;
+  background: var(--forest);
+  color: var(--cream);
+  transition: background 0.15s;
+}
+.btn:hover { background: var(--forest2); }
+.btn.ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 0.5px solid var(--paper4);
+}
+.btn.ghost:hover { background: var(--paper2); }
+
+/* Status tag — simpler, confident */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  padding: 3px 8px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.tag-must { background: var(--forest5); color: var(--forest2); }
+.tag-buy  { background: var(--amberL); color: var(--amber); }
+.tag-opt  { background: var(--paper2); color: var(--ink3); }
+.tag-pack { background: var(--forest2); color: var(--cream); }
+
+/* Filter chip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 0.5px solid var(--paper4);
+  border-radius: 99px;
+  background: var(--cream);
+  color: var(--ink2);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.chip.active { background: var(--forest); border-color: var(--forest); color: var(--cream); }
+.chip:hover:not(.active) { background: var(--paper2); }
+
+/* Item row */
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 2px;
+  border-bottom: 0.5px solid var(--paper2);
+  cursor: pointer;
+}
+.item-row:last-child { border-bottom: none; }
+.item-row.packed { opacity: 0.42; }
+.item-row.packed .item-name { text-decoration: line-through; }
+
+/* Check circle */
+.check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--paper4);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.check.on {
+  background: var(--forest2);
+  border-color: var(--forest2);
+}
+
+/* Section header — just a strong line */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 22px 0 10px;
+  border-bottom: 0.5px solid var(--ink4);
+}
+.section-head .num {
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--ink3);
+  flex-shrink: 0;
+  font-weight: 400;
+}
+.section-head .name {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  flex: 1;
+  letter-spacing: 0.01em;
+}
+.section-head .count {
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--ink3);
+}
+
+/* focus ring */
+input:focus, textarea:focus, button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--forest3);
+}
+
+input, textarea {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--cream);
+  border: 0.5px solid var(--paper3);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
