@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/features/trips/server";
 import { NewTripForm } from "@/features/trips/new-trip-form";
-import { LanguageSwitcher } from "@/components/language-switcher";
+import { HeaderIconMenus } from "@/components/header-icon-menus";
 import { resolveLang, texts } from "@/shared/i18n";
 
 export default async function NewTripPage({
@@ -30,7 +30,7 @@ export default async function NewTripPage({
         <Link href={`/?lang=${lang}`} className="text-sm underline">
           {t.backList}
         </Link>
-        <LanguageSwitcher lang={lang} />
+        <HeaderIconMenus lang={lang} />
       </div>
       <h1 className="mb-4 text-3xl text-[#1c1c18]" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>{t.createTrip}</h1>
       <NewTripForm templates={templates ?? []} lang={lang} error={errorMessage} />

@@ -1,46 +1,61 @@
 import Link from "next/link";
-import { copyPublicTrip } from "@/features/trips/actions";
+import { CommunityExploreClient } from "@/components/community-explore-client";
 import { requireUser } from "@/features/trips/server";
-import { resolveLang, texts } from "@/shared/i18n";
+import { resolveLang, texts, type Lang } from "@/shared/i18n";
+
+function hasCjk(text: string | null | undefined) {
+  return /[\u4e00-\u9fff]/.test(text ?? "");
+}
 
 export default async function ExplorePage({
   searchParams,
 }: {
-  searchParams: Promise<{ lang?: string }>;
+  searchParams: Promise<{ lang?: string; preview?: string }>;
 }) {
-  const { lang: rawLang } = await searchParams;
+  const { lang: rawLang, preview } = await searchParams;
   const lang = resolveLang(rawLang);
-  const t = texts[lang];
   const { supabase } = await requireUser();
-  const { data: trips } = await supabase
-    .from("trips")
-    .select("id,title,start_date,end_date,tags")
-    .eq("is_public", true)
-    .order("created_at", { ascending: false })
-    .limit(40);
+  const [{ data: templates }, { data: tripOptions }] = await Promise.all([
+    supabase
+      .from("community_templates")
+      .select(
+        "id,slug,title,author_name,source_name,source_logo_url,region,country,scenes,days_min,days_max,copy_count,item_add_count,description,note,trip_style,source_language,source_type,source_published_at,created_at,community_template_items(id,name,name_zh,name_en,section,category,status,note,note_zh,note_en,tags_zh,tags_en,image_url,added_to_trip_count,added_to_locker_count,sort_order)",
+      )
+      .order("is_featured", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase.from("trips").select("id,title").order("created_at", { ascending: false }).limit(30),
+  ]);
+  const autoZh = lang === "en" && (templates ?? []).some((template) => {
+    if (hasCjk(template.title) || hasCjk(template.description) || hasCjk(template.note)) return true;
+    const rows = template.community_template_items ?? [];
+    return rows.some((row) => hasCjk(row.name_zh) || hasCjk(row.note_zh) || hasCjk(row.name) || hasCjk(row.note));
+  });
+  const uiLang: Lang = autoZh ? "zh-CN" : lang;
+  const t = texts[uiLang];
 
   return (
-    <main className="packlog-page mx-auto w-full max-w-[980px] p-4 md:p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <Link href={`/?lang=${lang}`} className="text-sm underline">
+    <main className="packlog-page mx-auto w-full max-w-[660px] p-4 md:p-6">
+      <div className="mb-3 flex items-center justify-between">
+        <Link href={`/?lang=${uiLang}`} className="text-sm underline">
           {t.backList}
         </Link>
-        <h1 className="text-2xl" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>{t.explore}</h1>
+        <p className="text-sm text-[#78736a]">{t.explore}</p>
       </div>
-      <ul className="grid gap-3 md:grid-cols-2">
-        {(trips ?? []).map((trip) => (
-          <li key={trip.id} className="rounded-[10px] border border-[#d8d0c4] bg-[#fefcf8] p-3">
-            <p className="text-[18px]" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>{trip.title}</p>
-            <p className="mt-1 text-xs text-[#8c8880]">{trip.start_date ?? t.noDate} - {trip.end_date ?? t.noDate}</p>
-            <p className="mt-1 text-xs text-[#4a4840]">{Array.isArray(trip.tags) ? trip.tags.slice(0, 4).join(" · ") : ""}</p>
-            <form action={copyPublicTrip} className="mt-2">
-              <input type="hidden" name="source_trip_id" value={trip.id} />
-              <input type="hidden" name="lang" value={lang} />
-              <button type="submit" className="brand-btn-soft px-3 py-2 text-xs">{t.copyToMyTrip}</button>
-            </form>
-          </li>
-        ))}
-      </ul>
+      <h1 className="text-[36px] leading-[1.02] text-[#1f1c17]" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>
+        {uiLang === "en" ? "Checklist Community" : uiLang === "zh-TW" ? "清單廣場" : "清单广场"}
+      </h1>
+      <p className="mb-4 mt-1 text-xs tracking-[0.08em] text-[#8d887d]">
+        {uiLang === "en" ? "1280 CONTRIBUTIONS · UPDATED DAILY" : uiLang === "zh-TW" ? "1280 份投稿 · 每日更新" : "1280 份投稿 · 每日更新"}
+      </p>
+      <CommunityExploreClient
+        templates={(templates ?? []).map((template) => ({
+          ...template,
+          items: (template.community_template_items ?? []).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+        }))}
+        trips={tripOptions ?? []}
+        lang={uiLang}
+        initialPreview={preview}
+      />
     </main>
   );
 }

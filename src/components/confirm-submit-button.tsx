@@ -31,10 +31,10 @@ export function ConfirmSubmitButton({ confirmText, cancelText = "Cancel", okText
           <div className="w-full max-w-sm rounded-[14px] border border-[#d8d0c4] bg-[#fefcf8] p-4">
             <p className="text-[16px] text-[#1f1f1b]">{confirmText}</p>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className="brand-btn-soft px-3 py-2 text-sm" onClick={() => setOpen(false)}>
+              <button type="button" className="brand-btn-soft px-3 py-2 text-[12px]" onClick={() => setOpen(false)}>
                 {cancelText}
               </button>
-              <button type="button" className="brand-btn-primary px-3 py-2 text-sm" onClick={handleConfirm}>
+              <button type="button" className="brand-btn-primary px-3 py-2 text-[12px]" onClick={handleConfirm}>
                 {okText}
               </button>
             </div>

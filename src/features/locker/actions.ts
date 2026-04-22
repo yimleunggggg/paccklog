@@ -2,11 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/trips/server";
+import { normalizeItemCategory } from "@/shared/item-categories";
 
 export async function addLockerItem(formData: FormData) {
   const { supabase, user } = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
-  const category = String(formData.get("category") ?? "").trim();
+  const category = normalizeItemCategory(String(formData.get("category") ?? "").trim());
   const brand = String(formData.get("brand") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
   const status = String(formData.get("status") ?? "owned");
@@ -30,7 +31,7 @@ export async function updateLockerItem(formData: FormData) {
   if (!id) return;
 
   const name = String(formData.get("name") ?? "").trim();
-  const category = String(formData.get("category") ?? "").trim();
+  const category = normalizeItemCategory(String(formData.get("category") ?? "").trim());
   const brand = String(formData.get("brand") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
   const status = String(formData.get("status") ?? "owned");

@@ -14,8 +14,11 @@ export const itemCategories = [
   "toiletries",
   "documents",
   "nutrition",
-  "camping",
   "first_aid",
+  "bags",
+  "accessories",
+  "disposable",
+  "camping",
   "other",
 ] as const;
 export type ItemCategory = (typeof itemCategories)[number];

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Building2, ChevronLeft, ChevronRight, Compass, Music2, Plane, TentTree, Waves, Zap } from "lucide-react";
+import { Building2, ChevronDown, ChevronLeft, ChevronRight, Compass, Music2, Plane, TentTree, Waves, Zap } from "lucide-react";
 import { createTripWithTemplates } from "@/features/trips/actions";
 import { type Lang, texts } from "@/shared/i18n";
 
@@ -215,6 +215,15 @@ function formatDateInput(value: Date) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function parseDateOnly(value: string) {
+  const [yearText, monthText, dayText] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day, 12, 0, 0, 0);
+}
+
 function sameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
@@ -358,13 +367,20 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
     return group[country] ?? [];
   }, [continent, country, region, regionOptions]);
   const filteredCities = countryCities.filter((item) => matchesSearch(item, cityQuery)).slice(0, 80);
+  const selectedDurationDays = useMemo(() => {
+    if (!startDate || !endDate) return null;
+    const s = parseDateOnly(startDate);
+    const e = parseDateOnly(endDate);
+    if (!s || !e || e < s) return null;
+    return Math.floor((e.getTime() - s.getTime()) / 86400000) + 1;
+  }, [startDate, endDate]);
   const generatedTitle = useMemo(() => {
     if (!startDate) return "";
-    const s = new Date(startDate);
+    const s = parseDateOnly(startDate);
     const effectiveEndDate = endDate || startDate;
-    const e = new Date(effectiveEndDate);
-    if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || e < s) return t.invalidDateHint;
-    const days = Math.ceil((e.getTime() - s.getTime()) / 86400000) + 1;
+    const e = parseDateOnly(effectiveEndDate);
+    if (!s || !e || e < s) return t.invalidDateHint;
+    const days = Math.floor((e.getTime() - s.getTime()) / 86400000) + 1;
     const mainCity = selectedCities[0] || country || continent;
     const mainScene = selectedScenes.length ? selectedScenes.slice(0, 2).join("") : (lang === "en" ? "Trip" : "行程");
     return `${mainCity} · ${mainScene} · ${days}${lang === "en" ? "d" : "日"}`;
@@ -399,8 +415,8 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
     [travelPresets],
   );
 
-  const startDateObj = startDate ? new Date(startDate) : null;
-  const endDateObj = endDate ? new Date(endDate) : null;
+  const startDateObj = startDate ? parseDateOnly(startDate) : null;
+  const endDateObj = endDate ? parseDateOnly(endDate) : null;
   const monthGrid = useMemo(() => buildMonthGrid(calendarMonth), [calendarMonth]);
   const monthOptions = useMemo(
     () =>
@@ -415,8 +431,8 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
   const goNextStep = () => {
     if (step === 1 && startDate && !endDate) {
       if (quickDuration && quickDuration > 0) {
-        const s = new Date(startDate);
-        if (!Number.isNaN(s.getTime())) {
+        const s = parseDateOnly(startDate);
+        if (s) {
           const e = new Date(s);
           e.setDate(e.getDate() + quickDuration - 1);
           setEndDate(formatDateInput(e));
@@ -485,7 +501,7 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
                   setSelectedCities(nextCities?.[0] ? [nextCities[0]] : []);
                   setCityQuery("");
                 }}
-                className="h-12 w-full rounded-[10px] border-[0.5px] border-[#d8d0c4] bg-[#fefcf8] px-3 text-[16px]"
+                className="ui-native-select h-11 w-full rounded-[10px] border-[0.5px] border-[#d8d0c4] bg-[#fefcf8] px-3 text-[14px]"
               >
                 {continents.map((item) => (
                   <option key={item} value={item}>
@@ -500,10 +516,15 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
                 <button
                   type="button"
                   onClick={() => setCountryOpen((prev) => !prev)}
-                  className="flex h-12 w-full items-center justify-between rounded-[10px] border-[0.5px] border-[#d8d0c4] bg-[#fefcf8] px-3 text-[16px]"
+                  className="relative flex h-11 w-full items-center justify-between rounded-[10px] border-[0.5px] border-[#d8d0c4] bg-[#fefcf8] px-3 pr-[34px] text-[14px]"
                 >
                   <span className="truncate text-left">{country || t.selectCountry}</span>
-                  <span>▾</span>
+                  <ChevronDown
+                    size={14}
+                    strokeWidth={1.8}
+                    className="pointer-events-none absolute right-[10px] top-1/2 -translate-y-1/2 text-[#4a4840]"
+                    aria-hidden
+                  />
                 </button>
                 {countryOpen ? (
                   <div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-[10px] border border-[#d8d0c4] bg-[#fefcf8] p-1 shadow-sm">
@@ -560,7 +581,7 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
                         : countryCities;
                   setSelectedCities(nextCities?.[0] ? [nextCities[0]] : []);
                 }}
-                className="h-12 w-full rounded-[10px] border-[0.5px] border-[#d8d0c4] bg-[#fefcf8] px-3 text-[16px]"
+                className="ui-native-select h-11 w-full rounded-[10px] border-[0.5px] border-[#d8d0c4] bg-[#fefcf8] px-3 text-[14px]"
                 disabled={!regionOptions.length}
               >
                 <option value="">
@@ -586,16 +607,31 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
             <label className="text-sm">
               <p className="mb-1 text-[12px] tracking-[0.06em] text-[#8c8880]">CITY</p>
               <div className="relative">
-                <input
-                  value={cityQuery}
-                  onFocus={() => setCityOpen(true)}
-                  onBlur={() => setTimeout(() => setCityOpen(false), 120)}
-                  onChange={(e) => {
-                    setCityQuery(e.target.value);
-                  }}
-                  className="h-12 w-full rounded-[10px] border-[0.5px] border-[#d8d0c4] bg-[#fefcf8] px-3 text-[16px]"
-                  placeholder={t.searchCity}
-                />
+                <div className="flex min-h-11 w-full flex-wrap items-center gap-1 rounded-[10px] border-[0.5px] border-[#d8d0c4] bg-[#fefcf8] px-2 py-1">
+                  {selectedCities.map((city) => (
+                    <button
+                      key={city}
+                      type="button"
+                      className="brand-chip px-2.5 py-1 text-[11px]"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setSelectedCities((prev) => prev.filter((c) => c !== city));
+                      }}
+                    >
+                      {city} ×
+                    </button>
+                  ))}
+                  <input
+                    value={cityQuery}
+                    onFocus={() => setCityOpen(true)}
+                    onBlur={() => setTimeout(() => setCityOpen(false), 120)}
+                    onChange={(e) => {
+                      setCityQuery(e.target.value);
+                    }}
+                    className="min-w-[120px] flex-1 border-0 bg-transparent px-1 py-1 text-[14px] outline-none"
+                    placeholder={selectedCities.length ? t.searchCity : `${t.searchCity}`}
+                  />
+                </div>
                 {cityOpen ? (
                   <div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-[10px] border border-[#d8d0c4] bg-[#fefcf8] p-1 shadow-sm">
                     {[...new Set(filteredCities)].map((item) => (
@@ -628,18 +664,6 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
                   </div>
                 ) : null}
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {selectedCities.map((city) => (
-                  <button
-                    key={city}
-                    type="button"
-                    className="brand-chip px-3 py-1 text-xs"
-                    onClick={() => setSelectedCities((prev) => prev.filter((c) => c !== city))}
-                  >
-                    {city} ×
-                  </button>
-                ))}
-              </div>
               {!selectedCities.length ? <p className="mt-1 text-xs text-[#9b6a2a]">{t.cityRequired}</p> : null}
             </label>
           </div>
@@ -651,14 +675,14 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
               <button
                 key={days}
                 type="button"
-                className={`brand-chip min-w-[58px] px-3 py-2 text-sm ${quickDuration === days ? "brand-chip-active" : ""}`}
+                className={`brand-chip min-w-[58px] ${quickDuration === days ? "brand-chip-active" : ""}`}
                 onClick={() => {
                   setIsCustomDuration(false);
                   setCustomDurationValue("");
                   setQuickDuration(days);
                   if (!startDate) return;
-                  const s = new Date(startDate);
-                  if (Number.isNaN(s.getTime())) return;
+                  const s = parseDateOnly(startDate);
+                  if (!s) return;
                   const e = new Date(s);
                   e.setDate(e.getDate() + days - 1);
                   setEndDate(formatDateInput(e));
@@ -669,7 +693,7 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
             ))}
             <button
               type="button"
-              className={`brand-chip min-w-[58px] px-3 py-2 text-sm ${isCustomDuration ? "brand-chip-active" : ""}`}
+              className={`brand-chip min-w-[58px] ${isCustomDuration ? "brand-chip-active" : ""}`}
               onClick={() => {
                 setIsCustomDuration(true);
                 setQuickDuration(null);
@@ -688,8 +712,8 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
                   if (parsed > 0) {
                     setQuickDuration(parsed);
                     if (startDate) {
-                      const s = new Date(startDate);
-                      if (!Number.isNaN(s.getTime())) {
+                      const s = parseDateOnly(startDate);
+                      if (s) {
                         const end = new Date(s);
                         end.setDate(end.getDate() + parsed - 1);
                         setEndDate(formatDateInput(end));
@@ -704,6 +728,11 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
               />
             ) : null}
           </div>
+          {selectedDurationDays ? (
+            <p className="mt-2 text-[12px] text-[#6f6b62]">
+              {lang === "en" ? `Selected duration: ${selectedDurationDays} day(s)` : lang === "zh-TW" ? `已選時長：${selectedDurationDays} 天` : `已选时长：${selectedDurationDays} 天`}
+            </p>
+          ) : null}
         </div>
         <div>
           <p className="mb-2 text-[12px] tracking-[0.06em] text-[#8c8880]">{t.dateStep}</p>
@@ -718,7 +747,7 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
                     const y = Number(e.target.value);
                     setCalendarMonth((prev) => new Date(y, prev.getMonth(), 1));
                   }}
-                  className="h-9 min-w-[82px] rounded-[10px] border border-[#d8d0c4] bg-[#fefcf8] px-2 text-[13px] leading-9 text-[#2f2d29]"
+                  className="ui-native-select h-9 min-w-[88px] rounded-[10px] border border-[#d8d0c4] bg-[#fefcf8] px-3 text-[13px] leading-9 text-[#2f2d29]"
                 >
                   {yearOptions.map((year) => (
                     <option key={year} value={year}>
@@ -732,7 +761,7 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
                     const m = Number(e.target.value);
                     setCalendarMonth((prev) => new Date(prev.getFullYear(), m, 1));
                   }}
-                  className="h-9 min-w-[78px] rounded-[10px] border border-[#d8d0c4] bg-[#fefcf8] px-2 text-[13px] leading-9 text-[#2f2d29]"
+                  className="ui-native-select h-9 min-w-[88px] rounded-[10px] border border-[#d8d0c4] bg-[#fefcf8] px-3 text-[13px] leading-9 text-[#2f2d29]"
                 >
                   {monthOptions.map((month) => (
                     <option key={month.value} value={month.value}>
@@ -781,7 +810,8 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
                       if (!startDate || (startDate && endDate)) {
                         setStartDate(clicked);
                         if (quickDuration && quickDuration > 0) {
-                          const start = new Date(clicked);
+                          const start = parseDateOnly(clicked);
+                          if (!start) return;
                           const autoEnd = new Date(start);
                           autoEnd.setDate(autoEnd.getDate() + quickDuration - 1);
                           setEndDate(formatDateInput(autoEnd));
@@ -906,14 +936,14 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
         {step > 1 ? (
           <button
             type="button"
-            className="brand-btn-soft shrink-0 whitespace-nowrap px-4 py-2 text-sm"
+            className="brand-btn-soft shrink-0 whitespace-nowrap px-4 py-2 text-[12px]"
             onClick={() => setStep((prev) => Math.max(1, prev - 1))}
           >
             {t.prevStep}
           </button>
         ) : null}
         {step < 3 ? (
-          <button type="button" className="brand-btn-editorial whitespace-nowrap px-6 py-2 text-sm" onClick={goNextStep}>
+          <button type="button" className="brand-btn-editorial whitespace-nowrap px-6 py-2 text-[12px]" onClick={goNextStep}>
             {t.nextStep}
           </button>
         ) : (

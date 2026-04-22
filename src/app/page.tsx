@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { Pin, PinOff, Trash2 } from "lucide-react";
-import { signOut } from "@/features/auth/actions";
+import { Archive, ArchiveRestore, Pin, PinOff, Trash2 } from "lucide-react";
 import { deleteTrip, toggleTripArchived, toggleTripPinned } from "@/features/trips/actions";
 import { requireUser } from "@/features/trips/server";
-import { LanguageSwitcher } from "@/components/language-switcher";
+import { HeaderIconMenus } from "@/components/header-icon-menus";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { resolveLang, texts } from "@/shared/i18n";
 
@@ -49,7 +48,7 @@ export default async function Home({
   };
   const statusLabel = (value?: string | null) => {
     if (!value) return "";
-    if (value === "planning" || value === "in_progress") return t.packingNow;
+    if (value === "planning" || value === "in_progress" || value === "packing" || value === "traveling") return t.packingNow;
     if (value === "done" || value === "completed") return t.tabArchived;
     return value;
   };
@@ -72,11 +71,47 @@ export default async function Home({
 
     return normalized || title;
   };
+  const splitTripTitle = (raw?: string | null) => {
+    const cleaned = cleanTripTitle(raw)
+      .replace(/[—–-]/g, " · ")
+      .replace(/\s*·\s*/g, " · ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    const parts = cleaned
+      .split("·")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    return {
+      city: parts[0] ?? cleaned,
+      detail: parts.slice(1).join(" · "),
+    };
+  };
   const visibleTrips = normalizedTrips.filter((trip) => {
-    if (selectedStatus === "in_progress") return trip.status === "planning" || trip.status === "in_progress";
+    if (selectedStatus === "in_progress") {
+      return trip.status === "planning" || trip.status === "in_progress" || trip.status === "packing" || trip.status === "traveling";
+    }
     if (selectedStatus === "done") return trip.status === "done" || trip.status === "completed";
     return true;
   });
+  const hasFilter = selectedStatus !== "all";
+  const filterHint =
+    visibleTrips.length === 0
+      ? lang === "en"
+        ? "No matching trips. Try another filter."
+        : lang === "zh-TW"
+          ? "未找到符合條件的行程，請調整篩選。"
+          : "未找到符合条件的行程，请调整筛选。"
+      : hasFilter
+        ? lang === "en"
+          ? `Filtered trips: ${visibleTrips.length} / ${normalizedTrips.length}`
+          : lang === "zh-TW"
+            ? `篩選結果：${visibleTrips.length} / ${normalizedTrips.length}`
+            : `筛选结果：${visibleTrips.length} / ${normalizedTrips.length}`
+        : lang === "en"
+          ? `Showing all trips: ${normalizedTrips.length}`
+          : lang === "zh-TW"
+            ? `顯示全部 ${normalizedTrips.length} 個行程`
+            : `显示全部 ${normalizedTrips.length} 个行程`;
 
   return (
     <main className="packlog-page mx-auto w-full max-w-[980px] p-4 md:p-6">
@@ -91,22 +126,18 @@ export default async function Home({
           </h1>
           <p className="text-sm text-[#8c8880]">{user.email}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Link href={`/locker?lang=${lang}`} className="brand-btn-soft inline-flex h-10 items-center px-4 text-sm">
+            <Link href={`/explore?lang=${lang}`} className="brand-btn-soft inline-flex h-10 items-center px-4 text-[12px]">
+              {t.navExplore}
+            </Link>
+            <Link href={`/locker?lang=${lang}`} className="brand-btn-soft inline-flex h-10 items-center px-4 text-[12px]">
               {t.gearLocker}
             </Link>
-            <Link href={`/trips/new?lang=${lang}`} className="brand-btn-primary inline-flex h-10 items-center px-4 text-sm">
+            <Link href={`/trips/new?lang=${lang}`} className="brand-btn-primary inline-flex h-10 items-center px-4 text-[12px]">
               {t.newTrip}
             </Link>
           </div>
           </div>
-          <div className="flex items-center gap-2">
-            <LanguageSwitcher lang={lang} />
-            <form action={signOut}>
-              <button className="brand-btn-soft inline-flex h-10 items-center px-3 text-sm" type="submit">
-                {t.signOut}
-              </button>
-            </form>
-          </div>
+          <HeaderIconMenus lang={lang} />
         </div>
       </header>
 
@@ -126,79 +157,79 @@ export default async function Home({
           <Link
             key={tab.value}
             href={`/?lang=${lang}&status=${tab.value}`}
-            className={`brand-chip inline-flex min-w-[72px] items-center justify-center px-4 py-2 text-sm ${selectedStatus === tab.value ? "border-[#243d1f] bg-[#243d1f] text-[#fefcf8]" : "text-[#34322d]"}`}
+            className={`brand-chip inline-flex min-w-[72px] ${selectedStatus === tab.value ? "brand-chip-active" : ""}`}
           >
             {(tab.label ?? "").trim() || (tab.value === "all" ? (lang === "en" ? "All" : lang === "zh-TW" ? "全部" : "全部") : tab.value === "in_progress" ? (lang === "en" ? "In progress" : lang === "zh-TW" ? "進行中" : "进行中") : lang === "en" ? "Archived" : lang === "zh-TW" ? "歸檔" : "归档")}
           </Link>
         ))}
       </div>
+      <p className={`ui-filter-hint mb-3 ${visibleTrips.length === 0 ? "ui-filter-hint-empty" : ""}`}>{filterHint}</p>
       {!normalizedTrips || normalizedTrips.length === 0 ? (
         <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
           {t.emptyTrips}
         </div>
       ) : (
         <ul>
-          {visibleTrips.map((trip) => (
-            <li
-              key={trip.id}
-              className={`py-4 ${trip.pinned ? "relative pl-3" : ""}`}
-            >
-              {trip.pinned ? <span className="absolute left-0 top-4 h-[calc(100%-2rem)] w-[2px] rounded-full bg-[#3a5c33]" /> : null}
-              <div className="mb-2 flex items-start justify-between gap-3">
-                <Link href={`/trips/${trip.id}?lang=${lang}`} className="block flex-1">
-                  <p className="text-[11px] tracking-[0.08em] text-[#8c8880]">{statusLabel(trip.status)}</p>
-                  <p className="text-[20px] leading-[1.1] text-[#1c1c18] md:text-[24px]" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>
-                    {cleanTripTitle(trip.title)}
+          {visibleTrips.map((trip) => {
+            const titleParts = splitTripTitle(trip.title);
+            const isArchived = trip.status === "done" || trip.status === "completed";
+            return (
+            <li key={trip.id} className="group border-b border-[#e8e3d8] py-3">
+              <div className="mb-1.5 flex items-start justify-between gap-3">
+                <Link href={`/trips/${trip.id}?lang=${lang}`} className="block min-w-0 flex-1">
+                  <p className="trip-ledger-title">
+                    <b>{titleParts.city}</b>
+                    {titleParts.detail ? <em> · {titleParts.detail}</em> : null}
                   </p>
-                  <p className="mt-2 flex items-center gap-2 text-[13px] text-[#6f6b62]">
-                    {(trip.start_date ?? t.noDate)} - {(trip.end_date ?? t.noDate)}
-                    <span className="status-tag status-tag-container">{statusLabel(trip.status)}</span>
+                  <p className="trip-ledger-meta">
+                    {trip.pinned ? <span className="trip-pinned-dot" aria-label={t.pin} /> : null}
+                    <span>{(trip.start_date ?? t.noDate)} - {(trip.end_date ?? t.noDate)}</span>
+                    <span className="trip-ledger-dot" />
+                    <span>{(trip.sceneTags ?? []).map((s) => sceneLabelMap[s.name_zh] ?? s.name_zh).join(" · ") || "-"}</span>
+                    <span className="trip-ledger-dot" />
+                    <span>{trip.itemCount} {t.itemsCount}</span>
                   </p>
                 </Link>
-                <div className="flex items-center gap-2">
+                <div className="trip-actions mt-0.5 flex items-center gap-1">
                   <form action={toggleTripArchived}>
                     <input type="hidden" name="trip_id" value={trip.id} />
                     <input type="hidden" name="current_status" value={trip.status} />
-                    <button className="brand-chip px-2 py-1 text-xs" type="submit">
-                      {trip.status === "done" || trip.status === "completed" ? t.unarchive : t.archive}
+                    <button className="trip-action-btn" type="submit" aria-label={isArchived ? t.unarchive : t.archive}>
+                      {isArchived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
                     </button>
                   </form>
                   <form action={toggleTripPinned}>
                     <input type="hidden" name="trip_id" value={trip.id} />
                     <input type="hidden" name="next_pinned" value={trip.pinned ? "false" : "true"} />
-                    <button className="brand-chip p-2" type="submit" aria-label={trip.pinned ? t.unpin : t.pin}>
-                      {trip.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+                    <button className="trip-action-btn" type="submit" aria-label={trip.pinned ? t.unpin : t.pin}>
+                      {trip.pinned ? <PinOff size={13} /> : <Pin size={13} />}
                     </button>
                   </form>
                   <form action={deleteTrip}>
                     <input type="hidden" name="trip_id" value={trip.id} />
                     <ConfirmSubmitButton
-                      className="brand-chip p-2 text-[#9b6a2a]"
+                      className="trip-action-btn text-[#9b6a2a]"
                       aria-label={t.delete}
                       confirmText={t.deleteConfirm}
                       cancelText={t.confirmCancel}
                       okText={t.confirmOk}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} />
                     </ConfirmSubmitButton>
                   </form>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2 text-xs text-[#8c8880]">
-                {(trip.sceneTags ?? []).length ? <span>{(trip.sceneTags ?? []).map((s) => sceneLabelMap[s.name_zh] ?? s.name_zh).join(" · ")}</span> : null}
-                <span>· {trip.itemCount} {t.itemsCount}</span>
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-                <div className="trip-progress-track flex-1">
+              <div className="mt-3 flex items-center gap-2">
+                <div className="trip-progress-track flex-1" aria-label={statusLabel(trip.status)}>
                   <div className="trip-progress-fill" style={{ width: `${trip.itemCount ? Math.round((trip.packedCount / trip.itemCount) * 100) : 0}%` }} />
                 </div>
-                <p className="text-[14px] leading-none text-[#3a5c33]" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>
+                <p className="trip-progress-percent">
                   {trip.itemCount ? Math.round((trip.packedCount / trip.itemCount) * 100) : 0}%
                 </p>
               </div>
-              <div className="mt-4 h-px w-full bg-[#ddd5c8]" />
             </li>
-          ))}
+          );
+          })}
         </ul>
       )}
     </main>

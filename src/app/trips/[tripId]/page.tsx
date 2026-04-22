@@ -1,14 +1,16 @@
 import Link from "next/link";
-import { Backpack, Briefcase, CalendarDays, CircleDot, MapPin, Package, Shirt } from "lucide-react";
-import type { ComponentType } from "react";
+import { CalendarDays, CircleDot, MapPin } from "lucide-react";
 import { addTripItem, saveTripAsTemplate } from "@/features/trips/actions";
 import { requireUser } from "@/features/trips/server";
-import { LanguageSwitcher } from "@/components/language-switcher";
+import { HeaderIconMenus } from "@/components/header-icon-menus";
 import { LockerPickerSheet } from "@/components/locker-picker-sheet";
 import { QuickAddForm } from "@/components/quick-add-form";
 import { SortableTripGroup } from "@/components/sortable-trip-group";
+import { TripContainerGroups } from "@/components/trip-container-groups";
+import { TripShareActions } from "@/components/trip-share-actions";
 import { resolveLang, texts } from "@/shared/i18n";
 import { getTripWeather } from "@/lib/weather";
+import { getItemCategoryOptions, normalizeItemCategory } from "@/shared/item-categories";
 
 type TripDetailPageProps = {
   params: Promise<{ tripId: string }>;
@@ -18,8 +20,9 @@ type TripDetailPageProps = {
 export default async function TripDetailPage({ params, searchParams }: TripDetailPageProps) {
   const [{ tripId }, query] = await Promise.all([params, searchParams]);
   const statusFilter = query.status ?? "all";
-  const view = query.view ?? "category";
-  const mode = query.mode === "compact" ? "compact" : "detail";
+  const allowedViews = new Set(["all", "category", "container"]);
+  const view = query.view && allowedViews.has(query.view) ? query.view : "all";
+  const mode = "detail" as const;
   const lang = resolveLang(query.lang);
   const allowedContainers = new Set(["undecided", "suitcase", "backpack", "carry_on", "wear"]);
   const containerFilter = query.container && allowedContainers.has(query.container) ? query.container : "";
@@ -50,17 +53,12 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
           acc[item.container] = [...(acc[item.container] ?? []), item];
           return acc;
         }, {})
-      : (items ?? []).reduce<Record<string, typeof items>>((acc, item) => {
+      : view === "category"
+        ? (items ?? []).reduce<Record<string, typeof items>>((acc, item) => {
           acc[item.category] = [...(acc[item.category] ?? []), item];
           return acc;
-        }, {});
-  const containerIconMap: Record<string, ComponentType<{ size?: number; className?: string }>> = {
-    suitcase: Briefcase,
-    backpack: Backpack,
-    carry_on: Package,
-    wear: Shirt,
-    undecided: Package,
-  };
+          }, {})
+        : { all_items: items };
   const statusMeta: Record<string, string> = {
     all: t.statusAll?.trim() || (lang === "en" ? "All" : "全部"),
     to_pack: t.statusToPack?.trim() || (lang === "en" ? "To pack" : "待打包"),
@@ -69,14 +67,9 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
     optional: t.statusOptional?.trim() || (lang === "en" ? "Optional" : "可选"),
   };
   const statusFilters = ["all", "to_pack", "packed", "to_buy", "optional"] as const;
-  const priorityMeta: Record<string, string> = {
-    to_pack: lang === "en" ? "Must carry" : "必带",
-    packed: lang === "en" ? "Must carry" : "必带",
-    to_buy: lang === "en" ? "Need to buy" : "待购买",
-    optional: lang === "en" ? "Optional" : "可选",
-  };
   const categoryViewLabel = t.categoryView?.trim() || (lang === "en" ? "Category view" : "分类视图");
   const containerViewLabel = t.containerView?.trim() || (lang === "en" ? "By container" : "按容器");
+  const allViewLabel = lang === "en" ? "All view" : lang === "zh-TW" ? "全部視圖" : "全局视图";
   const containerMeta: Record<string, string> = {
     undecided: t.containerUndecided,
     suitcase: t.containerSuitcase,
@@ -84,17 +77,8 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
     carry_on: t.containerCarryOn,
     wear: t.containerWear,
   };
-  const categoryMeta: Record<string, string> = {
-    clothing: t.categoryClothing,
-    footwear: t.categoryFootwear,
-    electronics: t.categoryElectronics,
-    toiletries: t.categoryToiletries,
-    documents: t.categoryDocuments,
-    nutrition: t.categoryNutrition,
-    camping: t.categoryCamping,
-    first_aid: t.categoryFirstAid,
-    other: t.categoryOther,
-  };
+  const categoryOptions = getItemCategoryOptions(lang);
+  const categoryMeta = Object.fromEntries(categoryOptions.map((option) => [option.value, option.label]));
 
   const total = items?.length ?? 0;
   const packed = items?.filter((item) => item.status === "packed").length ?? 0;
@@ -106,6 +90,25 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
     to_buy: allItems?.filter((item) => item.status === "to_buy").length ?? 0,
     optional: allItems?.filter((item) => item.status === "optional").length ?? 0,
   };
+  const hasFilter = statusFilter !== "all" || Boolean(containerFilter);
+  const filterHint =
+    items.length === 0
+      ? lang === "en"
+        ? "No matching items. Try another filter."
+        : lang === "zh-TW"
+          ? "未找到符合條件的物品，請調整篩選。"
+          : "未找到符合条件的物品，请调整筛选。"
+      : hasFilter
+        ? lang === "en"
+          ? `Filtered items: ${items.length} / ${allItems.length}`
+          : lang === "zh-TW"
+            ? `篩選結果：${items.length} / ${allItems.length}`
+            : `筛选结果：${items.length} / ${allItems.length}`
+        : lang === "en"
+          ? `Showing all items: ${allItems.length}`
+          : lang === "zh-TW"
+            ? `顯示全部 ${allItems.length} 件物品`
+            : `显示全部 ${allItems.length} 件物品`;
   const country = trip?.tags?.[1];
   const cityTagRaw = trip?.tags?.[2] ?? "";
   const city = cityTagRaw.split("/")[0]?.trim() || cityTagRaw.split("、")[0]?.trim() || cityTagRaw;
@@ -158,7 +161,11 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
             <ul className="space-y-1 text-sm">
               <li className="rounded px-2 py-1 text-[#4a4840]">01 {t.navTripList}</li>
               <li className="rounded px-2 py-1 text-[#8c8880]">02 {t.navTemplates}</li>
-              <li className="rounded px-2 py-1 text-[#8c8880]">03 {t.navExplore}</li>
+              <li>
+                <Link href={`/explore?lang=${lang}`} className="block rounded px-2 py-1 text-[#8c8880] hover:bg-[#f3eee5] hover:text-[#3a5c33]">
+                  03 {t.navExplore}
+                </Link>
+              </li>
             </ul>
             <div className="my-3 h-px bg-[#e1d9cd]" />
             <p className="mb-2 text-[11px] tracking-[0.08em] text-[#8c8880]">{t.yourTrips.toUpperCase()}</p>
@@ -179,7 +186,7 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
         <Link href={`/?lang=${lang}`} className="text-sm underline">
           {t.backList}
         </Link>
-        <LanguageSwitcher lang={lang} />
+        <HeaderIconMenus lang={lang} />
       </div>
       <section className="mb-5 rounded-[20px] bg-[#17361f] p-5 text-[#f1f5ee]">
         <p className="text-[12px] tracking-[0.08em] text-[#9fbc97]">
@@ -226,7 +233,10 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
           {normalizedDescription}
         </p>
       ) : null}
-      {(trip?.status === "done" || trip?.status === "completed") ? (
+      {progress >= 100 ? (
+        <TripShareActions tripId={tripId} lang={lang} title={trip?.title ?? t.tripDetail} progress={progress} />
+      ) : null}
+      {(trip?.status === "done" || trip?.status === "completed" || progress >= 100) ? (
         <form action={saveTripAsTemplate} className="mb-4">
           <input type="hidden" name="trip_id" value={tripId} />
           <button type="submit" className="brand-btn-soft px-3 py-2 text-xs">
@@ -268,31 +278,38 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
         </div>
       </section>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="mr-1 text-[13px] text-muted-foreground">{t.checklistView}</span>
         {statusFilters.map((s) => (
           <Link
             key={s}
-            href={`/trips/${tripId}?status=${s}&view=${view}&mode=${mode}&lang=${lang}${containerFilter ? `&container=${containerFilter}` : ""}`}
-            className={`inline-flex h-10 items-center rounded-[10px] border px-4 text-[14px] ${statusFilter === s ? "border-[#243d1f] bg-[#243d1f] text-[#fefcf8]" : "border-[#d8d0c4] bg-[#fefcf8] text-[#34322d]"}`}
+            href={`/trips/${tripId}?status=${s}&view=${view}&lang=${lang}${containerFilter ? `&container=${containerFilter}` : ""}`}
+            className={`brand-chip ${statusFilter === s ? "brand-chip-active" : ""}`}
           >
             {statusMeta[s]}{" "}
             <span className={statusFilter === s ? "text-[#d0ddca]" : "text-[#8c8880]"}>{statusCount[s]}</span>
           </Link>
         ))}
         <Link
-          href={`/trips/${tripId}?status=${statusFilter}&view=category&mode=${mode}&lang=${lang}${containerFilter ? `&container=${containerFilter}` : ""}`}
-          className={`brand-chip ${view === "category" ? "bg-primary text-primary-foreground" : ""}`}
+          href={`/trips/${tripId}?status=${statusFilter}&view=all&lang=${lang}`}
+          className={`brand-chip ${view === "all" ? "brand-chip-active" : ""}`}
+        >
+          {allViewLabel}
+        </Link>
+        <Link
+          href={`/trips/${tripId}?status=${statusFilter}&view=category&lang=${lang}`}
+          className={`brand-chip ${view === "category" ? "brand-chip-active" : ""}`}
         >
           {categoryViewLabel}
         </Link>
         <Link
-          href={`/trips/${tripId}?status=${statusFilter}&view=container&mode=${mode}&lang=${lang}${containerFilter ? "" : ""}`}
-          className={`brand-chip ${view === "container" ? "bg-primary text-primary-foreground" : ""}`}
+          href={`/trips/${tripId}?status=${statusFilter}&view=container&lang=${lang}`}
+          className={`brand-chip ${view === "container" ? "brand-chip-active" : ""}`}
         >
-          {containerViewLabel}{containerFilter ? " ×" : ""}
+          {containerViewLabel}
         </Link>
       </div>
+      <p className={`ui-filter-hint mb-3 ${items.length === 0 ? "ui-filter-hint-empty" : ""}`}>{filterHint}</p>
       <section className="mb-5 rounded-xl border border-[#d8d0c4] bg-[#fefcf8] p-3">
         <div className="mb-2 flex justify-end">
           <LockerPickerSheet
@@ -300,78 +317,61 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
             buttonLabel={t.fromGearLocker}
             submitLabel={t.addSelectedToTrip}
             items={lockerItems ?? []}
+            defaultStatus={statusFilter === "to_buy" || statusFilter === "optional" ? statusFilter : "to_pack"}
           />
         </div>
         <QuickAddForm
           tripId={tripId}
           quickAddPlaceholder={t.quickAddBar}
           addLabel={lang === "en" ? "Add" : lang === "zh-TW" ? "新增" : "添加"}
-          statusToPack={t.statusToPack}
-          statusToBuy={t.statusToBuy}
-          statusOptional={t.statusOptional}
-          customCategoryLabel={lang === "en" ? "Custom category" : lang === "zh-TW" ? "自訂分類" : "自定义分类"}
-          customCategoryPlaceholder={lang === "en" ? "Enter category name" : lang === "zh-TW" ? "輸入分類名稱" : "输入分类名称"}
-          viewToggleLabel={t.viewToggle}
-          viewToggleHref={`/trips/${tripId}?status=${statusFilter}&view=${view}&mode=${mode === "detail" ? "compact" : "detail"}&lang=${lang}${containerFilter ? `&container=${containerFilter}` : ""}`}
-          categories={Object.entries(categoryMeta).map(([value, label]) => ({ value, label }))}
+          defaultStatus={statusFilter === "to_buy" || statusFilter === "optional" || statusFilter === "packed" ? statusFilter : "to_pack"}
+          brandLabel={t.brand}
+          brandOptionalHint={lang === "en" ? "optional" : lang === "zh-TW" ? "可選" : "可选"}
+          noteLabel={lang === "en" ? "Note (optional)" : lang === "zh-TW" ? "備註（可選）" : "备注（可选）"}
+          categories={categoryOptions}
         />
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-5">
         {view === "container" ? (
-          <div className="space-y-3">
-            {Object.entries(grouped).map(([group, groupItems]) => {
-              const Icon = containerIconMap[group] ?? Package;
-              const totalInContainer = groupItems?.length ?? 0;
-              const packedInContainer = (groupItems ?? []).filter((item) => item.status === "packed").length;
-              const containerProgress = totalInContainer ? Math.round((packedInContainer / totalInContainer) * 100) : 0;
-              return (
-                <section key={group} className="container-card">
-                  <Link
-                    href={`/trips/${tripId}?status=${statusFilter}&view=category&mode=${mode}&lang=${lang}&container=${group}`}
-                    className="container-head"
-                  >
-                    <div className="container-icon">
-                      <Icon size={20} className="text-[#546c4f]" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="container-cap">{String(group).toUpperCase()}</p>
-                      <h3 className="container-title">{containerMeta[group] ?? group}</h3>
-                      <p className="container-meta">{totalInContainer} {t.containerItemsPacked} {packedInContainer}</p>
-                    </div>
-                  </Link>
-                  <div className="container-progress">
-                    <div style={{ width: `${containerProgress}%` }} />
-                  </div>
-                  <div className="container-item-lines">
-                    {(groupItems ?? []).slice(0, 8).map((item) => (
-                      <button key={item.id} className="container-item-chip" type="button">
-                        {item.name}
-                      </button>
-                    ))}
-                    {(groupItems ?? []).length > 8 ? <span className="container-more">+{(groupItems ?? []).length - 8} {t.moreSuffix}</span> : null}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
+          <TripContainerGroups
+            tripId={tripId}
+            lang={lang}
+            grouped={grouped}
+            containerMeta={containerMeta}
+            categoryMeta={categoryMeta}
+            categoryOptions={categoryOptions}
+            statusMeta={statusMeta}
+            containerItemsPackedText={t.containerItemsPacked}
+            saveText={t.save}
+            cancelText={t.confirmCancel}
+            saveToLockerText={t.saveToGearLocker}
+            lockerLinkedHintText={lang === "en" ? "Already linked to Gear Locker. Edits auto-sync." : lang === "zh-TW" ? "已關聯裝備庫，編輯將自動同步。" : "已关联装备库，编辑将自动同步。"}
+            brandPlaceholder={t.brand}
+            brandAlternativesPlaceholder={t.brandAlternativesPlaceholder}
+            notePlaceholder={t.noteField}
+            editLabel={t.advancedEdit}
+            savePendingText={t.savePending}
+            saveSuccessText={t.saveSuccess}
+            saveFailedText={t.saveFailed}
+            tripStatus={trip?.status}
+            reviewLabels={[
+              { value: "used", label: t.reviewUsed },
+              { value: "unused", label: t.reviewUnused },
+              { value: "missed", label: t.reviewMissed },
+              { value: "skip", label: t.reviewSkip },
+            ]}
+          />
         ) : (
-          Object.entries(grouped).map(([group, groupItems]) => (
-            <details key={group} className="section-group rounded-none" open>
-              <summary className="section-head list-none cursor-pointer">
-                <span className="section-icon" aria-hidden />
-                <span className="section-index">
-                  {String(Math.max(1, Object.keys(grouped).indexOf(group) + 1)).padStart(2, "0")}
-                </span>
-                <span className="section-name">
-                  {(categoryMeta[group] ?? group).toUpperCase()}
-                </span>
-                <span className="section-count">
-                  {groupItems?.length ?? 0}
-                </span>
-                <span className="section-arrow ml-2 text-xs text-[#b8b4ac]">›</span>
-              </summary>
+          Object.entries(grouped).map(([group, groupItems], groupIndex) => (
+            <section key={group}>
+              <div className="section-head">
+                <span className="section-index">{String(groupIndex + 1).padStart(2, "0")}</span>
+                <span className="section-name">{group === "all_items" ? (lang === "en" ? "ALL ITEMS" : "全部物品") : group.replace(/_/g, " ").toUpperCase()}</span>
+                <span className="section-count">{groupItems?.length ?? 0}</span>
+              </div>
               <SortableTripGroup
+                key={`${group}:${(groupItems ?? []).map((item) => `${item.id}:${item.status}:${item.container}:${item.category}`).join("|")}`}
                 items={groupItems ?? []}
                 tripId={tripId}
                 group={group}
@@ -380,14 +380,20 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
                 lang={lang}
                 statusMeta={statusMeta}
                 containerMeta={containerMeta}
-                priorityMeta={priorityMeta}
+                categoryMeta={categoryMeta}
+                categoryOptions={categoryOptions}
+                showCategoryTag={view !== "category"}
                 saveText={t.save}
                 cancelText={t.confirmCancel}
                 saveToLockerText={t.saveToGearLocker}
+                lockerLinkedHintText={lang === "en" ? "Already linked to Gear Locker. Edits auto-sync." : lang === "zh-TW" ? "已關聯裝備庫，編輯將自動同步。" : "已关联装备库，编辑将自动同步。"}
                 brandPlaceholder={t.brand}
                 brandAlternativesPlaceholder={t.brandAlternativesPlaceholder}
                 notePlaceholder={t.noteField}
                 editLabel={t.advancedEdit}
+                savePendingText={t.savePending}
+                saveSuccessText={t.saveSuccess}
+                saveFailedText={t.saveFailed}
                 tripStatus={trip?.status}
                 reviewLabels={[
                   { value: "used", label: t.reviewUsed },
@@ -396,15 +402,18 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
                   { value: "skip", label: t.reviewSkip },
                 ]}
               />
-            </details>
+            </section>
           ))
         )}
       </section>
 
       <section className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#d8d0c4] bg-[#f4f1ec] p-3 md:hidden">
-        <form action={addTripItem} className="mx-auto flex w-full max-w-5xl gap-2">
+        <form action={async (formData) => {
+          "use server";
+          await addTripItem(formData);
+        }} className="mx-auto flex w-full max-w-5xl gap-2">
           <input type="hidden" name="trip_id" value={tripId} />
-          <input type="hidden" name="category" value="other" />
+          <input type="hidden" name="category" value={normalizeItemCategory("other")} />
           <input
             required
             name="name"

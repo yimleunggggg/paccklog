@@ -1,20 +1,28 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useFormStatus } from "react-dom";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { addTripItem } from "@/features/trips/actions";
+import { BrandSelect } from "@/components/brand-select";
+
+function QuickAddFormBusy({ children }: { children: React.ReactNode }) {
+  const { pending } = useFormStatus();
+  return (
+    <div className={pending ? "opacity-65 pointer-events-none transition-opacity duration-150" : "transition-opacity"} aria-busy={pending}>
+      {children}
+    </div>
+  );
+}
 
 type QuickAddFormProps = {
   tripId: string;
   quickAddPlaceholder: string;
   addLabel: string;
-  statusToPack: string;
-  statusToBuy: string;
-  statusOptional: string;
-  customCategoryLabel: string;
-  customCategoryPlaceholder: string;
-  viewToggleLabel: string;
-  viewToggleHref: string;
+  defaultStatus: "to_pack" | "to_buy" | "optional" | "packed";
+  brandLabel: string;
+  brandOptionalHint: string;
+  noteLabel: string;
   categories: Array<{ value: string; label: string }>;
 };
 
@@ -22,129 +30,109 @@ export function QuickAddForm({
   tripId,
   quickAddPlaceholder,
   addLabel,
-  statusToPack,
-  statusToBuy,
-  statusOptional,
-  customCategoryLabel,
-  customCategoryPlaceholder,
-  viewToggleLabel,
-  viewToggleHref,
+  defaultStatus,
+  brandLabel,
+  brandOptionalHint,
+  noteLabel,
   categories,
 }: QuickAddFormProps) {
   const [category, setCategory] = useState(categories[0]?.value ?? "other");
-  const [customCategory, setCustomCategory] = useState("");
   const [categoryOpen, setCategoryOpen] = useState(false);
-  const [statusOpen, setStatusOpen] = useState(false);
   const [name, setName] = useState("");
-  const currentLabel =
-    category === "__custom__"
-      ? customCategoryLabel
-      : categories.find((item) => item.value === category)?.label ?? categories[0]?.label ?? "Other";
+  const [brand, setBrand] = useState("");
+  const [note, setNote] = useState("");
+  const [lastAdded, setLastAdded] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const currentLabel = categories.find((item) => item.value === category)?.label ?? categories[0]?.label ?? "Other";
 
   const canAdd = name.trim().length > 0;
 
   return (
-    <form action={addTripItem} className="grid gap-2 md:grid-cols-[1fr_130px_110px_100px]">
-      <input type="hidden" name="trip_id" value={tripId} />
-      <input
-        required
-        name="name"
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-        placeholder={`+ ${quickAddPlaceholder}...`}
-        className="h-11 rounded-xl border px-3 text-sm"
-      />
-      <div className="relative">
-        <input type="hidden" name="category" value={category} />
-        <input type="hidden" name="custom_category" value={customCategory} />
-        <button
-          type="button"
-          className="flex h-11 w-full items-center justify-between rounded-xl border border-[#d8d0c4] bg-[#fefcf8] px-3 text-sm text-[#2f2d29]"
-          onClick={() => setCategoryOpen((prev) => !prev)}
-        >
-          <span>{currentLabel}</span>
-          <span>▾</span>
-        </button>
-        {categoryOpen ? (
-          <div className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-[10px] border border-[#d8d0c4] bg-[#fefcf8] p-1 shadow-sm">
-            {categories.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                className={`block w-full rounded px-2 py-2 text-left text-sm ${category === item.value ? "bg-[#e8f2e4] text-[#243d1f]" : "text-[#2f2d29] hover:bg-[#f2eee6]"}`}
-                onMouseDown={() => {
-                  setCategory(item.value);
-                  setCategoryOpen(false);
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
+    <form
+      action={(formData) => {
+        startTransition(async () => {
+          const result = await addTripItem(formData);
+          if (!result.ok || !result.item) {
+            setLastAdded("添加失败，请重试");
+            return;
+          }
+          setLastAdded(`已添加：${result.item.name}`);
+          setName("");
+          setBrand("");
+          setNote("");
+          router.refresh();
+        });
+      }}
+      className="flex flex-col gap-2"
+    >
+      <QuickAddFormBusy>
+        <input type="hidden" name="trip_id" value={tripId} />
+        <input type="hidden" name="status" value={defaultStatus} />
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_130px_minmax(0,1fr)_minmax(0,1fr)_120px] lg:items-end">
+          <input
+            required
+            name="name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={`+ ${quickAddPlaceholder}...`}
+            className="ui-control-input h-11 rounded-xl sm:col-span-2 lg:col-span-1"
+          />
+          <div className="relative">
+            <input type="hidden" name="category" value={category} />
             <button
               type="button"
-              className={`block w-full rounded px-2 py-2 text-left text-sm ${category === "__custom__" ? "bg-[#e8f2e4] text-[#243d1f]" : "text-[#2f2d29] hover:bg-[#f2eee6]"}`}
-              onMouseDown={() => {
-                setCategory("__custom__");
-                setCategoryOpen(false);
-              }}
+              className="ui-control-trigger flex h-11 w-full items-center justify-between rounded-xl"
+              onClick={() => setCategoryOpen((prev) => !prev)}
             >
-              + {customCategoryLabel}
+              <span className="truncate">{currentLabel}</span>
+              <span>▾</span>
             </button>
+            {categoryOpen ? (
+              <div className="ui-dropdown-panel absolute z-30 max-h-56 w-full overflow-auto p-1">
+                {categories.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className={`ui-dropdown-option block w-full text-left ${category === item.value ? "ui-dropdown-option-active" : ""}`}
+                    onMouseDown={() => {
+                      setCategory(item.value);
+                      setCategoryOpen(false);
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
-        ) : null}
-        {category === "__custom__" ? (
-          <input
-            value={customCategory}
-            onChange={(event) => setCustomCategory(event.target.value)}
-            placeholder={customCategoryPlaceholder}
-            className="mt-1 h-9 w-full rounded-[10px] border border-[#d8d0c4] bg-[#fefcf8] px-2 text-sm"
+          <BrandSelect
+            name="brand"
+            value={brand}
+            onChange={setBrand}
+            placeholder={brandLabel}
+            optionalHint={brandOptionalHint}
+            className="ui-control-trigger flex h-11 w-full items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-xl"
           />
-        ) : null}
-      </div>
-      <div className="relative">
-        <button
-          type="button"
-          disabled={!canAdd}
-          onClick={() => setStatusOpen((prev) => (canAdd ? !prev : prev))}
-          className="brand-btn-primary h-11 w-full px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {addLabel}
-        </button>
-        {statusOpen ? (
-          <div className="absolute right-0 z-30 mt-1 w-40 rounded-[10px] border border-[#d8d0c4] bg-[#fefcf8] p-1 shadow-sm">
+          <input
+            name="note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder={noteLabel}
+            className="ui-control-input h-11 w-full rounded-[10px] text-[13px] sm:col-span-2 lg:col-span-1"
+          />
+          <div className="w-full sm:max-w-[220px] lg:max-w-none">
             <button
               type="submit"
-              name="status"
-              value="to_pack"
-              className="block w-full rounded px-2 py-2 text-left text-sm text-[#2f2d29] hover:bg-[#e8f2e4] hover:text-[#243d1f]"
-              onClick={() => setStatusOpen(false)}
+              disabled={!canAdd || isPending}
+              className="brand-btn-primary h-11 w-full px-4 text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {statusToPack}
-            </button>
-            <button
-              type="submit"
-              name="status"
-              value="to_buy"
-              className="block w-full rounded px-2 py-2 text-left text-sm text-[#2f2d29] hover:bg-[#f5ecd8] hover:text-[#9b6a2a]"
-              onClick={() => setStatusOpen(false)}
-            >
-              {statusToBuy}
-            </button>
-            <button
-              type="submit"
-              name="status"
-              value="optional"
-              className="block w-full rounded px-2 py-2 text-left text-sm text-[#2f2d29] hover:bg-[#eae5da] hover:text-[#6b695f]"
-              onClick={() => setStatusOpen(false)}
-            >
-              {statusOptional}
+              {isPending ? "添加中..." : addLabel}
             </button>
           </div>
-        ) : null}
-      </div>
-      <Link href={viewToggleHref} className="brand-btn-soft inline-flex h-11 items-center justify-center px-3 text-sm">
-        {viewToggleLabel}
-      </Link>
+        </div>
+        <p className="text-[12px] text-[#6f6b62]">{lastAdded}</p>
+      </QuickAddFormBusy>
     </form>
   );
 }

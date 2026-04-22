@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PACKLOG 行前志 · 首页重设计</title>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --paper:#F4F1EC;--paper2:#E8E3D8;--paper3:#CEC8BC;
+  --forest:#243D1F;--forest2:#3A5C33;--forest3:#6B9460;--forest5:#E8F2E4;
+  --ink:#1C1C18;--ink2:#4A4840;--ink3:#8C8880;--ink4:#B8B4AC;
+  --amber:#9B6A2A;--cream:#FEFCF8
+}
+body{
+  font-family:'DM Sans',sans-serif;
+  background:#E5E0D8;
+  min-height:100vh;
+  display:flex;align-items:flex-start;justify-content:center;
+  padding:32px 16px;
+  -webkit-font-smoothing:antialiased
+}
+
+/* ── 手机外框 ── */
+.phone{
+  width:375px;min-height:700px;
+  background:var(--paper);
+  border-radius:44px;
+  overflow:hidden;
+  border:1px solid rgba(0,0,0,.12);
+  position:relative
+}
+.status-bar{
+  height:44px;display:flex;align-items:flex-end;justify-content:center;
+  padding:0 24px 8px;background:var(--paper)
+}
+.notch{
+  width:120px;height:34px;background:var(--ink);
+  border-radius:0 0 20px 20px;margin:0 auto
+}
+.screen{padding:0 0 36px}
+
+/* ── Header ── */
+.hd{padding:18px 22px 0}
+.brand-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.brand{font-family:'EB Garamond',serif;font-size:22px;font-style:italic;color:var(--ink);letter-spacing:-.01em}
+.brand b{font-style:normal}
+.hd-right{display:flex;align-items:center;gap:8px}
+.lang-btn{
+  font-size:10px;padding:4px 10px;border-radius:20px;
+  border:.5px solid var(--paper3);background:transparent;
+  color:var(--ink3);cursor:pointer;font-family:'DM Sans',sans-serif
+}
+.avatar{
+  width:28px;height:28px;border-radius:50%;
+  background:var(--forest);display:flex;align-items:center;justify-content:center
+}
+.avatar span{font-size:11px;color:var(--cream);font-weight:500}
+.email{font-size:10px;color:var(--ink4);margin:3px 0 16px}
+
+/* ── 导航 ── */
+.nav{display:flex;gap:6px;margin-bottom:22px}
+.nav-btn{
+  font-size:11px;padding:7px 14px;border-radius:20px;
+  border:.5px solid var(--paper3);background:var(--cream);
+  color:var(--ink2);cursor:pointer;font-family:'DM Sans',sans-serif;
+  transition:all .15s;white-space:nowrap
+}
+.nav-btn.pri{background:var(--forest);border-color:var(--forest);color:var(--cream)}
+
+/* ── 分区头 ── */
+.sec-hd{
+  display:flex;align-items:baseline;justify-content:space-between;
+  padding:0 22px;margin-bottom:12px
+}
+.sec-lbl{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
+.sec-date{font-family:'EB Garamond',serif;font-size:12px;font-style:italic;color:var(--ink4)}
+
+/* ── 筛选 ── */
+.filters{display:flex;gap:5px;padding:0 22px;margin-bottom:16px}
+.ftag{
+  font-size:10px;padding:5px 12px;border-radius:20px;
+  border:.5px solid var(--paper3);background:var(--cream);
+  color:var(--ink3);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s
+}
+.ftag.on{background:var(--ink);border-color:var(--ink);color:var(--cream)}
+
+/* ── 行程列表 ── */
+.trips{padding:0 22px}
+
+.trip{
+  padding:16px 0 14px;
+  border-bottom:.5px solid var(--paper2);
+  cursor:pointer;position:relative
+}
+.trip:last-child{border-bottom:none}
+
+/* 操作按钮 —— 默认隐藏，hover 显示 */
+.trip-top{display:flex;align-items:center;margin-bottom:9px}
+.trip-idx{
+  font-family:'EB Garamond',serif;font-size:10px;
+  font-style:italic;color:var(--ink4);min-width:22px
+}
+.s-dot{
+  width:5px;height:5px;border-radius:50%;
+  margin-left:2px;margin-right:10px;flex-shrink:0
+}
+.s-packing{background:var(--forest3)}
+.s-done{background:var(--ink4)}
+.trip-acts{
+  margin-left:auto;display:flex;gap:0;
+  opacity:0;transition:opacity .2s
+}
+.trip:hover .trip-acts{opacity:1}
+.abt{
+  width:26px;height:26px;border-radius:50%;border:none;
+  background:transparent;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--ink3);transition:background .15s
+}
+.abt:hover{background:var(--paper2)}
+.abt svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.abt.del{color:#C0392B}
+
+/* 标题 */
+.trip-title{
+  font-family:'EB Garamond',serif;font-size:21px;
+  color:var(--ink);line-height:1.2;margin-bottom:6px;
+  transition:color .15s
+}
+.trip-title b{font-style:normal}
+.trip-title em{font-style:italic;color:var(--ink2)}
+.trip:hover .trip-title{color:var(--forest2)}
+
+/* 元信息 */
+.trip-meta{
+  display:flex;align-items:center;gap:5px;
+  margin-bottom:10px;flex-wrap:wrap
+}
+.meta-dates{font-size:10px;color:var(--ink4);letter-spacing:.02em}
+.mdot{width:2px;height:2px;border-radius:50%;background:var(--ink4);flex-shrink:0}
+.meta-tags{font-size:10px;color:var(--ink3)}
+.meta-ct{font-size:10px;color:var(--ink4)}
+
+/* 进度条 */
+.prog{display:flex;align-items:center;gap:8px}
+.prog-bar{flex:1;height:1.5px;background:var(--paper3);border-radius:1px;overflow:hidden}
+.prog-fill{height:100%;background:var(--forest3);border-radius:1px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.prog-pct{
+  font-family:'EB Garamond',serif;font-size:11px;
+  font-style:italic;color:var(--ink4);min-width:28px;text-align:right
+}
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="status-bar"><div class="notch"></div></div>
+  <div class="screen">
+
+    <div class="hd">
+      <div class="brand-row">
+        <div class="brand"><b>PACKLOG</b> 行前志</div>
+        <div class="hd-right">
+          <button class="lang-btn">中文</button>
+          <div class="avatar"><span>Y</span></div>
+        </div>
+      </div>
+      <div class="email">yimleung.ly@gmail.com</div>
+      <div class="nav">
+        <button class="nav-btn">装备仓库</button>
+        <button class="nav-btn">精选清单</button>
+        <button class="nav-btn pri">+ 新建行程</button>
+      </div>
+    </div>
+
+    <div class="sec-hd">
+      <span class="sec-lbl">我的行程</span>
+      <span class="sec-date">Apr 22, 2026</span>
+    </div>
+
+    <div class="filters">
+      <button class="ftag on" onclick="setF('all',this)">全部</button>
+      <button class="ftag" onclick="setF('packing',this)">打包中</button>
+      <button class="ftag" onclick="setF('done',this)">已归档</button>
+    </div>
+
+    <div class="trips" id="trips"></div>
+
+  </div>
+</div>
+
+<script>
+const trips=[
+  {idx:'01',dest:'西班牙 · 马德里',sub:'城市漫游 · 音乐节 · 潜水',
+   start:'Apr 8',end:'Apr 10',tags:'出国 · 音乐节 · 潜水',count:31,packed:4,st:'packing'},
+  {idx:'02',dest:'日本 · 九州 · 屋久岛',sub:'徒步 · 露营 · Solo',
+   start:'Apr 29',end:'May 5',tags:'出国 · 徒步 · 露营',count:34,packed:5,st:'packing'},
+  {idx:'03',dest:'日本 · 东京',sub:'城市漫游 · 越野跑',
+   start:'Apr 2',end:'Apr 8',tags:'出国 · 越野跑',count:34,packed:8,st:'packing'},
+  {idx:'04',dest:'清迈 · Wonderfruit',sub:'露营音乐节 · 5日',
+   start:'Dec 11',end:'Dec 15',tags:'出国 · 音乐节 · 露营',count:28,packed:0,st:'packing'},
+  {idx:'05',dest:'成都 · 大理',sub:'国内独旅 · 城市漫游',
+   start:'May 20',end:'May 27',tags:'国内 · 城市漫游',count:18,packed:18,st:'done'},
+];
+
+let filt='all';
+function setF(f,btn){
+  filt=f;
+  document.querySelectorAll('.ftag').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');render();
+}
+
+function render(){
+  const list=trips.filter(t=>filt==='all'||(filt==='packing'&&t.st==='packing')||(filt==='done'&&t.st==='done'));
+  document.getElementById('trips').innerHTML=list.map((t,i)=>{
+    const pct=t.count?Math.round(t.packed/t.count*100):0;
+    const parts=t.dest.split('·');
+    const city=parts[0]?.trim();
+    const detail=parts.slice(1).join('·').trim();
+    return `
+    <div class="trip">
+      <div class="trip-top">
+        <span class="trip-idx">${t.idx}</span>
+        <span class="s-dot ${t.st==='packing'?'s-packing':'s-done'}"></span>
+        <div class="trip-acts">
+          <button class="abt" title="归档" onclick="event.stopPropagation()">
+            <svg viewBox="0 0 16 16"><path d="M2 5h12v8a1 1 0 01-1 1H3a1 1 0 01-1-1V5z"/><path d="M1 3h14v2H1z"/><path d="M6 8h4"/></svg>
+          </button>
+          <button class="abt" title="置顶" onclick="event.stopPropagation()">
+            <svg viewBox="0 0 16 16"><path d="M8 2v9M5 5l3-3 3 3"/><path d="M4 13h8"/></svg>
+          </button>
+          <button class="abt del" title="删除" onclick="event.stopPropagation()">
+            <svg viewBox="0 0 16 16"><path d="M3 4h10"/><path d="M6 4V2.5h4V4"/><path d="M5 4l.5 9h5L11 4"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="trip-title"><b>${city}</b>${detail?` · <em>${detail}</em>`:''}</div>
+      <div class="trip-meta">
+        <span class="meta-dates">${t.start} — ${t.end}</span>
+        <span class="mdot"></span>
+        <span class="meta-tags">${t.tags}</span>
+        <span class="mdot"></span>
+        <span class="meta-ct">${t.count} 件</span>
+      </div>
+      <div class="prog">
+        <div class="prog-bar"><div class="prog-fill" style="width:${pct}%"></div></div>
+        <span class="prog-pct">${pct}%</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+render();
+</script>
+</body>
+</html>
