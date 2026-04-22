@@ -119,6 +119,15 @@ function parseItemInsights(note: string | null) {
   };
 }
 
+function inferPriceSource(priceRef: string) {
+  const raw = String(priceRef ?? "").toLowerCase();
+  const sources = [];
+  if (raw.includes("amazon")) sources.push("Amazon");
+  if (raw.includes("taobao") || raw.includes("天猫") || raw.includes("tmall")) sources.push("Taobao/Tmall");
+  if (raw.includes("official") || raw.includes("官网")) sources.push("Official");
+  return sources.join(" + ");
+}
+
 function inferItemKeywords(name: string, note: string | null, lang: Lang) {
   const raw = `${name} ${note ?? ""}`.toLowerCase();
   const tags: string[] = [];
@@ -544,6 +553,11 @@ export function CommunityExploreClient({
                                         {tx.priceRef}：{insights.priceRef}
                                       </span>
                                     ) : null}
+                                    {insights.priceRef ? (
+                                      <span className="rounded-full border border-[#ddd4c7] bg-white px-2 py-0.5 text-[10px] text-[#7a756c]">
+                                        {tx.priceMeta}：2026-04-22 · {tx.priceMetaSource} {inferPriceSource(insights.priceRef) || tx.priceMetaDisclaimer}
+                                      </span>
+                                    ) : null}
                                   </div>
                                 );
                               })()}
@@ -598,6 +612,11 @@ export function CommunityExploreClient({
                                           {tx.sourceSection}：{insights.sourceSection || item.section || tx.fallbackSection}
                                         </p>
                                         {insights.priceRef ? <p>{tx.priceRef}：{insights.priceRef}</p> : null}
+                                        {insights.priceRef ? (
+                                          <p className="text-[11px] text-[#6d685f]">
+                                            {tx.priceMeta}：2026-04-22 · {tx.priceMetaSource} {inferPriceSource(insights.priceRef) || tx.priceMetaDisclaimer}
+                                          </p>
+                                        ) : null}
                                         {insights.highlights.length ? (
                                           <ul className="space-y-0.5">
                                             {insights.highlights.map((line) => (

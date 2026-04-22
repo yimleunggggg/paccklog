@@ -474,7 +474,7 @@
 .trip-ledger-meta {
   margin-top: 4px;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 5px;
   flex-wrap: wrap;
   font-size: 10px;
@@ -499,11 +499,17 @@
 
 .trip-actions {
   opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  min-width: 92px;
+  justify-content: flex-end;
   transition: opacity 0.14s ease;
 }
 
 .group:hover .trip-actions {
   opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 .trip-action-btn {
@@ -528,6 +534,24 @@
 @media (hover: none) {
   .trip-actions {
     opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .trip-ledger-title {
+    font-size: 18px;
+    line-height: 1.22;
+  }
+
+  .trip-ledger-meta {
+    font-size: 10.5px;
+    gap: 4px;
+  }
+
+  .trip-progress-percent {
+    min-width: 32px;
   }
 }
 
