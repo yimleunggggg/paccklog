@@ -25,6 +25,18 @@ export default async function ExplorePage({
       .order("created_at", { ascending: false }),
     supabase.from("trips").select("id,title").order("created_at", { ascending: false }).limit(30),
   ]);
+  const itemIds = (templates ?? []).flatMap((template) => (template.community_template_items ?? []).map((row) => row.id));
+  const { data: priceRows } = itemIds.length
+    ? await supabase
+        .from("community_item_price_refs")
+        .select("item_id,amount,currency,amount_text,source_name,source_url,captured_at,is_estimate")
+        .in("item_id", itemIds)
+        .order("captured_at", { ascending: false })
+    : { data: [] };
+  const latestPriceByItemId = new Map<string, NonNullable<typeof priceRows>[number]>();
+  for (const row of priceRows ?? []) {
+    if (!latestPriceByItemId.has(row.item_id)) latestPriceByItemId.set(row.item_id, row);
+  }
   const autoZh = lang === "en" && (templates ?? []).some((template) => {
     if (hasCjk(template.title) || hasCjk(template.description) || hasCjk(template.note)) return true;
     const rows = template.community_template_items ?? [];
@@ -50,7 +62,25 @@ export default async function ExplorePage({
       <CommunityExploreClient
         templates={(templates ?? []).map((template) => ({
           ...template,
-          items: (template.community_template_items ?? []).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+          items: (template.community_template_items ?? [])
+            .map((item) => {
+              const price = latestPriceByItemId.get(item.id);
+              return {
+                ...item,
+                price_ref: price
+                  ? {
+                      amount: price.amount,
+                      currency: price.currency,
+                      amount_text: price.amount_text,
+                      source_name: price.source_name,
+                      source_url: price.source_url,
+                      captured_at: price.captured_at,
+                      is_estimate: price.is_estimate,
+                    }
+                  : null,
+              };
+            })
+            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
         }))}
         trips={tripOptions ?? []}
         lang={uiLang}

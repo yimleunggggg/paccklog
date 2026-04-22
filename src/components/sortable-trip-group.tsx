@@ -79,6 +79,7 @@ export function SortableTripGroup({
   const [draggingId, setDraggingId] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [togglingPackedIds, setTogglingPackedIds] = useState<string[]>([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ mode: "single"; itemId: string } | { mode: "bulk" } | null>(null);
   const validSelectedIds = useMemo(
     () => selectedIds.filter((id) => orderedItems.some((item) => item.id === id)),
     [selectedIds, orderedItems],
@@ -130,9 +131,9 @@ export function SortableTripGroup({
     setTogglingPackedIds((prev) => prev.filter((id) => id !== row.id));
   }
 
-  async function handleDelete(row: TripItem) {
-    const confirmed = window.confirm(lang === "en" ? "Delete this item?" : lang === "zh-TW" ? "確定刪除這個物品？" : "确认删除这个物品？");
-    if (!confirmed) return;
+  async function confirmSingleDelete(itemId: string) {
+    const row = orderedItems.find((entry) => entry.id === itemId);
+    if (!row) return;
     const snapshot = orderedItems;
     setOrderedItems((prev) => prev.filter((entry) => entry.id !== row.id));
     const fd = new FormData();
@@ -157,10 +158,6 @@ export function SortableTripGroup({
 
   async function handleBulk(action: "delete" | "set_container" | "set_status" | "save_to_locker", value?: string) {
     if (!validSelectedIds.length) return;
-    if (action === "delete") {
-      const confirmed = window.confirm(lang === "en" ? "Delete selected items?" : lang === "zh-TW" ? "確定刪除選中物品？" : "确认删除选中物品？");
-      if (!confirmed) return;
-    }
     const fd = new FormData();
     fd.set("trip_id", tripId);
     fd.set("action", action);
@@ -174,7 +171,32 @@ export function SortableTripGroup({
     }
   }
 
+  async function handleDeleteConfirm() {
+    const pending = deleteConfirm;
+    setDeleteConfirm(null);
+    if (!pending) return;
+    if (pending.mode === "single") {
+      await confirmSingleDelete(pending.itemId);
+      return;
+    }
+    await handleBulk("delete");
+  }
+
+  const deleteConfirmText =
+    deleteConfirm?.mode === "bulk"
+      ? lang === "en"
+        ? "Delete selected items?"
+        : lang === "zh-TW"
+          ? "確定刪除選中物品？"
+          : "确认删除选中物品？"
+      : lang === "en"
+        ? "Delete this item?"
+        : lang === "zh-TW"
+          ? "確定刪除這個物品？"
+          : "确认删除这个物品？";
+
   return (
+    <>
     <ul>
       {orderedItems.length > 0 ? (
         <li className="trip-bulk-bar mb-2 flex flex-wrap items-center gap-2 text-[12px] text-[#6f6b62]">
@@ -182,7 +204,9 @@ export function SortableTripGroup({
             type="button"
             className="brand-chip"
             onClick={() =>
-              setSelectedIds((prev) => (prev.length === orderedItems.length ? [] : orderedItems.map((item) => item.id)))
+              setSelectedIds(() =>
+                validSelectedIds.length === orderedItems.length ? [] : orderedItems.map((item) => item.id),
+              )
             }
           >
             {lang === "en" ? "Select all" : lang === "zh-TW" ? "全選" : "全选"}
@@ -191,7 +215,7 @@ export function SortableTripGroup({
             {lang === "en" ? "Clear" : lang === "zh-TW" ? "清除" : "清空"}
           </button>
           <span>{lang === "en" ? `Selected ${validSelectedIds.length}` : lang === "zh-TW" ? `已選 ${validSelectedIds.length}` : `已选 ${validSelectedIds.length}`}</span>
-          <button type="button" className="brand-chip" onClick={() => handleBulk("delete")}>
+          <button type="button" className="brand-chip" onClick={() => setDeleteConfirm({ mode: "bulk" })}>
             {lang === "en" ? "Delete" : lang === "zh-TW" ? "刪除" : "删除"}
           </button>
           <button type="button" className="brand-chip" onClick={() => handleBulk("save_to_locker")}>
@@ -245,14 +269,14 @@ export function SortableTripGroup({
                   <div className="flex w-full min-w-0 items-center gap-2 text-left">
                     <input
                       type="checkbox"
-                      checked={item.status === "packed"}
+                      checked={validSelectedIds.includes(item.id)}
                       onChange={(e) => {
                         e.stopPropagation();
-                        void handleTogglePacked(item);
+                        toggleSelected(item.id);
                       }}
                       onClick={(e) => e.stopPropagation()}
                       className="ui-round-check"
-                      disabled={togglingPackedIds.includes(item.id)}
+                      aria-label={lang === "en" ? "Select item" : lang === "zh-TW" ? "選擇物品" : "选择物品"}
                     />
                     <button type="button" className="item-title break-keep text-left" onClick={() => toggleSelected(item.id)}>
                       {item.name}
@@ -296,7 +320,7 @@ export function SortableTripGroup({
                   <button
                     type="button"
                     className="list-row-action-icon"
-                    onClick={() => handleDelete(item)}
+                    onClick={() => setDeleteConfirm({ mode: "single", itemId: item.id })}
                     aria-label={lang === "en" ? "Delete item" : lang === "zh-TW" ? "刪除物品" : "删除物品"}
                     title={lang === "en" ? "Delete item" : lang === "zh-TW" ? "刪除物品" : "删除物品"}
                   >
@@ -361,5 +385,21 @@ export function SortableTripGroup({
         </li>
       ))}
     </ul>
+    {deleteConfirm ? (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true">
+        <div className="w-full max-w-sm rounded-[14px] border border-[#d8d0c4] bg-[#fefcf8] p-4">
+          <p className="text-[16px] text-[#1f1f1b]">{deleteConfirmText}</p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" className="brand-btn-soft px-3 py-2 text-[12px]" onClick={() => setDeleteConfirm(null)}>
+              {lang === "en" ? "Cancel" : lang === "zh-TW" ? "取消" : "取消"}
+            </button>
+            <button type="button" className="brand-btn-primary px-3 py-2 text-[12px]" onClick={() => void handleDeleteConfirm()}>
+              {lang === "en" ? "Confirm" : lang === "zh-TW" ? "確定" : "确定"}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }

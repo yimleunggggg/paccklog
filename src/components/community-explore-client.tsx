@@ -29,6 +29,15 @@ type CommunityItem = {
   added_to_trip_count?: number | null;
   added_to_locker_count?: number | null;
   section?: string | null;
+  price_ref?: {
+    amount?: number | null;
+    currency?: string | null;
+    amount_text?: string | null;
+    source_name?: string | null;
+    source_url?: string | null;
+    captured_at?: string | null;
+    is_estimate?: boolean | null;
+  } | null;
 };
 
 type CommunityTemplate = {
@@ -126,6 +135,14 @@ function inferPriceSource(priceRef: string) {
   if (raw.includes("taobao") || raw.includes("天猫") || raw.includes("tmall")) sources.push("Taobao/Tmall");
   if (raw.includes("official") || raw.includes("官网")) sources.push("Official");
   return sources.join(" + ");
+}
+
+function formatPriceMini(item: CommunityItem) {
+  const price = item.price_ref;
+  if (!price) return "";
+  if (price.amount_text?.trim()) return price.amount_text.trim();
+  if (typeof price.amount === "number" && price.currency) return `${price.currency} ${price.amount}`;
+  return "";
 }
 
 function inferItemKeywords(name: string, note: string | null, lang: Lang) {
@@ -540,7 +557,8 @@ export function CommunityExploreClient({
                               </p>
                               {(() => {
                                 const insights = parseItemInsights(getLocalizedItemNote(item, lang));
-                                if (!insights.sourceSection && !insights.priceRef) return null;
+                                const miniPrice = formatPriceMini(item);
+                                if (!insights.sourceSection && !insights.priceRef && !miniPrice) return null;
                                 return (
                                   <div className="mt-1 flex flex-wrap gap-1.5">
                                     {insights.sourceSection ? (
@@ -548,14 +566,14 @@ export function CommunityExploreClient({
                                         {tx.sourceSection}：{insights.sourceSection}
                                       </span>
                                     ) : null}
-                                    {insights.priceRef ? (
+                                    {miniPrice || insights.priceRef ? (
                                       <span className="rounded-full border border-[#ddd4c7] bg-[#f7f2e9] px-2 py-0.5 text-[11px] text-[#5f584f]">
-                                        {tx.priceRef}：{insights.priceRef}
+                                        {tx.priceRef}：{miniPrice || insights.priceRef}
                                       </span>
                                     ) : null}
-                                    {insights.priceRef ? (
+                                    {miniPrice || insights.priceRef ? (
                                       <span className="rounded-full border border-[#ddd4c7] bg-white px-2 py-0.5 text-[10px] text-[#7a756c]">
-                                        {tx.priceMeta}：2026-04-22 · {tx.priceMetaSource} {inferPriceSource(insights.priceRef) || tx.priceMetaDisclaimer}
+                                        {tx.priceMeta}：{item.price_ref?.captured_at?.slice(0, 10) || "2026-04-22"} · {tx.priceMetaSource} {item.price_ref?.source_name || inferPriceSource(insights.priceRef) || tx.priceMetaDisclaimer}
                                       </span>
                                     ) : null}
                                   </div>
@@ -611,10 +629,10 @@ export function CommunityExploreClient({
                                         <p>
                                           {tx.sourceSection}：{insights.sourceSection || item.section || tx.fallbackSection}
                                         </p>
-                                        {insights.priceRef ? <p>{tx.priceRef}：{insights.priceRef}</p> : null}
-                                        {insights.priceRef ? (
+                                        {formatPriceMini(item) || insights.priceRef ? <p>{tx.priceRef}：{formatPriceMini(item) || insights.priceRef}</p> : null}
+                                        {formatPriceMini(item) || insights.priceRef ? (
                                           <p className="text-[11px] text-[#6d685f]">
-                                            {tx.priceMeta}：2026-04-22 · {tx.priceMetaSource} {inferPriceSource(insights.priceRef) || tx.priceMetaDisclaimer}
+                                            {tx.priceMeta}：{item.price_ref?.captured_at?.slice(0, 10) || "2026-04-22"} · {tx.priceMetaSource} {item.price_ref?.source_name || inferPriceSource(insights.priceRef) || tx.priceMetaDisclaimer}
                                           </p>
                                         ) : null}
                                         {insights.highlights.length ? (
