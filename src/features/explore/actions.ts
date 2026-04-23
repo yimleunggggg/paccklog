@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/trips/server";
 import { detectBrandFromText } from "@/shared/brand-library";
 import { normalizeItemCategory } from "@/shared/item-categories";
+import { ensureGearMasterId } from "@/server/gear-master";
 
 export type ExploreMutationResult =
   | { ok: true }
@@ -27,11 +28,27 @@ function pickLocalizedCommunityValue(
 }
 
 let hasTripSourceLockerColumn: boolean | null = null;
+let hasTripGearIdColumn: boolean | null = null;
+let hasLockerGearIdColumn: boolean | null = null;
 async function canUseTripSourceLockerColumn(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"]) {
   if (hasTripSourceLockerColumn !== null) return hasTripSourceLockerColumn;
   const { error } = await supabase.from("trip_items").select("source_locker_id").limit(1);
   hasTripSourceLockerColumn = !error;
   return hasTripSourceLockerColumn;
+}
+
+async function canUseTripGearIdColumn(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"]) {
+  if (hasTripGearIdColumn !== null) return hasTripGearIdColumn;
+  const { error } = await supabase.from("trip_items").select("gear_id").limit(1);
+  hasTripGearIdColumn = !error;
+  return hasTripGearIdColumn;
+}
+
+async function canUseLockerGearIdColumn(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"]) {
+  if (hasLockerGearIdColumn !== null) return hasLockerGearIdColumn;
+  const { error } = await supabase.from("gear_locker").select("gear_id").limit(1);
+  hasLockerGearIdColumn = !error;
+  return hasLockerGearIdColumn;
 }
 
 export async function copyCommunityTemplateToTrip(formData: FormData): Promise<ExploreMutationResult> {
@@ -53,6 +70,7 @@ export async function copyCommunityTemplateToTrip(formData: FormData): Promise<E
   }
 
   const canUseSourceLocker = await canUseTripSourceLockerColumn(supabase);
+  const canUseTripGearId = await canUseTripGearIdColumn(supabase);
   const names = (templateItems ?? [])
     .map((item) =>
       pickLocalizedCommunityValue(lang, {
@@ -68,7 +86,7 @@ export async function copyCommunityTemplateToTrip(formData: FormData): Promise<E
       : { data: [] as Array<{ id: string; name: string }> };
   const lockerByName = new Map((ownedRows ?? []).map((row) => [row.name, row.id]));
 
-  const payload = (templateItems ?? []).map((item) => {
+  const payload = await Promise.all((templateItems ?? []).map(async (item) => {
     const localizedName =
       pickLocalizedCommunityValue(lang, {
         base: item.name,
@@ -78,24 +96,34 @@ export async function copyCommunityTemplateToTrip(formData: FormData): Promise<E
     const fromTemplate =
       item.status === "opt" ? "optional" : item.status === "buy" ? "to_buy" : "to_pack";
     const status = bulkStatus ?? fromTemplate;
+    const normalizedCategory = normalizeItemCategory(item.category || "other");
+    const resolvedBrand = item.brand || detectBrandFromText(localizedName)?.label || null;
+    const resolvedNote =
+      pickLocalizedCommunityValue(lang, {
+        base: item.note,
+        zh: item.note_zh,
+        en: item.note_en,
+      }) ?? null;
+    const gearId = await ensureGearMasterId(supabase, {
+      name: localizedName,
+      category: normalizedCategory,
+      brand: resolvedBrand,
+      note: resolvedNote,
+    });
     return {
       trip_id: tripId,
       ...(canUseSourceLocker ? { source_locker_id: lockerByName.get(localizedName) ?? null } : {}),
+      ...(canUseTripGearId ? { gear_id: gearId } : {}),
       name: localizedName,
-      category: normalizeItemCategory(item.category || "other"),
+      category: normalizedCategory,
       status,
       container: item.container || "undecided",
       quantity: 1,
-      brand: item.brand || detectBrandFromText(localizedName)?.label || null,
-      note:
-        pickLocalizedCommunityValue(lang, {
-          base: item.note,
-          zh: item.note_zh,
-          en: item.note_en,
-        }) ?? null,
+      brand: resolvedBrand,
+      note: resolvedNote,
       sort_order: item.sort_order ?? 0,
     };
-  });
+  }));
 
   const { error } = await supabase.from("trip_items").insert(payload);
   if (error) {
@@ -143,6 +171,13 @@ export async function addCommunityItemToLocker(formData: FormData): Promise<Expl
     }) ?? null;
   const detectedBrand = item.brand || detectBrandFromText(localizedName)?.label || null;
   const status = lockerStatus === "wishlist" ? "wishlist" : "owned";
+  const canUseLockerGearId = await canUseLockerGearIdColumn(supabase);
+  const gearId = await ensureGearMasterId(supabase, {
+    name: localizedName,
+    category: normalizedCategory,
+    brand: detectedBrand,
+    note: localizedNote,
+  });
   const { data: existing } = await supabase
     .from("gear_locker")
     .select("id")
@@ -154,6 +189,7 @@ export async function addCommunityItemToLocker(formData: FormData): Promise<Expl
     await supabase
       .from("gear_locker")
       .update({
+        ...(canUseLockerGearId ? { gear_id: gearId } : {}),
         category: normalizedCategory,
         brand: detectedBrand,
         note: localizedNote,
@@ -164,6 +200,7 @@ export async function addCommunityItemToLocker(formData: FormData): Promise<Expl
   } else {
     await supabase.from("gear_locker").insert({
       user_id: user.id,
+      ...(canUseLockerGearId ? { gear_id: gearId } : {}),
       name: localizedName,
       category: normalizedCategory,
       brand: detectedBrand,
@@ -235,19 +272,29 @@ export async function addCommunityItemToTrip(formData: FormData): Promise<Explor
       : "to_pack";
 
   const canUseSourceLocker = await canUseTripSourceLockerColumn(supabase);
+  const canUseTripGearId = await canUseTripGearIdColumn(supabase);
   const { data: existingLocker } =
     canUseSourceLocker
       ? await supabase.from("gear_locker").select("id").eq("user_id", user.id).ilike("name", localizedName).limit(1)
       : { data: [] as Array<{ id: string }> };
+  const normalizedCategory = normalizeItemCategory(item.category || "other");
+  const resolvedBrand = item.brand || detectBrandFromText(localizedName)?.label || null;
+  const gearId = await ensureGearMasterId(supabase, {
+    name: localizedName,
+    category: normalizedCategory,
+    brand: resolvedBrand,
+    note: localizedNote,
+  });
   const { error } = await supabase.from("trip_items").insert({
     trip_id: tripId,
     ...(canUseSourceLocker ? { source_locker_id: existingLocker?.[0]?.id ?? null } : {}),
+    ...(canUseTripGearId ? { gear_id: gearId } : {}),
     name: localizedName,
-    category: normalizeItemCategory(item.category || "other"),
+    category: normalizedCategory,
     status: tripStatus,
     container: "undecided",
     quantity: 1,
-    brand: item.brand || detectBrandFromText(localizedName)?.label || null,
+    brand: resolvedBrand,
     note: localizedNote,
   });
 

@@ -107,9 +107,9 @@ function main() {
   const missingReason = [];
   const missingImage = [];
   const missingNameEn = [];
-  const missingNameZh = [];
   const missingNoteEn = [];
-  const missingNoteZh = [];
+  const optionalMissingNameZh = [];
+  const optionalMissingNoteZh = [];
   const duplicateNames = {};
 
   for (const row of rows) {
@@ -132,9 +132,9 @@ function main() {
     if (!reason) missingReason.push(name);
     if (!image) missingImage.push(name);
     if (!itemNameEn) missingNameEn.push(name);
-    if (!itemNameZh) missingNameZh.push(name);
+    if (!itemNameZh) optionalMissingNameZh.push(name);
     if (!noteEn) missingNoteEn.push(name);
-    if (!noteZh) missingNoteZh.push(name);
+    if (!noteZh) optionalMissingNoteZh.push(name);
 
     const key = name.toLowerCase();
     duplicateNames[key] = (duplicateNames[key] || 0) + 1;
@@ -181,9 +181,9 @@ function main() {
 - Missing reason rows: ${missingReason.length}
 - Missing image rows: ${missingImage.length}
 - Missing item_name_en rows: ${missingNameEn.length}
-- Missing item_name_zh rows: ${missingNameZh.length}
+- Optional missing item_name_zh rows: ${optionalMissingNameZh.length}
 - Missing note_en rows: ${missingNoteEn.length}
-- Missing note_zh rows: ${missingNoteZh.length}
+- Optional missing note_zh rows: ${optionalMissingNoteZh.length}
 - Duplicate item names: ${duplicated.length}
 
 ## Details (Top 20)
@@ -209,14 +209,14 @@ ${uniq(missingImage).slice(0, 20).map((n) => `- ${n}`).join("\n") || "- none"}
 ### Missing item_name_en
 ${uniq(missingNameEn).slice(0, 20).map((n) => `- ${n}`).join("\n") || "- none"}
 
-### Missing item_name_zh
-${uniq(missingNameZh).slice(0, 20).map((n) => `- ${n}`).join("\n") || "- none"}
+### Optional Missing item_name_zh
+${uniq(optionalMissingNameZh).slice(0, 20).map((n) => `- ${n}`).join("\n") || "- none"}
 
 ### Missing note_en
 ${uniq(missingNoteEn).slice(0, 20).map((n) => `- ${n}`).join("\n") || "- none"}
 
-### Missing note_zh
-${uniq(missingNoteZh).slice(0, 20).map((n) => `- ${n}`).join("\n") || "- none"}
+### Optional Missing note_zh
+${uniq(optionalMissingNoteZh).slice(0, 20).map((n) => `- ${n}`).join("\n") || "- none"}
 
 ### Duplicate Names
 ${duplicated.slice(0, 20).map((n) => `- ${n}`).join("\n") || "- none"}

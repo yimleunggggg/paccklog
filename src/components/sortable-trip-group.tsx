@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 import { GripVertical, Trash2 } from "lucide-react";
 import { bulkOperateTripItems, deleteTripItem, reorderTripItemsByIds, setTripItemReview, toggleTripItemPacked } from "@/features/trips/actions";
 import { ItemEditSheet } from "@/components/item-edit-sheet";
+import { pickLangText } from "@/shared/localized-text";
 
 type TripItem = {
   id: string;
@@ -24,7 +25,7 @@ type SortableTripGroupProps = {
   items: TripItem[];
   tripId: string;
   group: string;
-  scopeField: "category" | "container";
+  scopeField: "category" | "container" | "all";
   mode: "detail" | "compact";
   lang: "zh-CN" | "zh-TW" | "en";
   statusMeta: Record<string, string>;
@@ -93,6 +94,7 @@ export function SortableTripGroup({
   };
 
   const canReview = tripStatus === "done" || tripStatus === "completed";
+  const l = (en: string, zhTW: string, zhCN: string) => pickLangText(lang, { en, zhTW, zhCN });
 
   const itemsById = useMemo(() => {
     return new Map(orderedItems.map((item) => [item.id, item]));
@@ -184,16 +186,8 @@ export function SortableTripGroup({
 
   const deleteConfirmText =
     deleteConfirm?.mode === "bulk"
-      ? lang === "en"
-        ? "Delete selected items?"
-        : lang === "zh-TW"
-          ? "確定刪除選中物品？"
-          : "确认删除选中物品？"
-      : lang === "en"
-        ? "Delete this item?"
-        : lang === "zh-TW"
-          ? "確定刪除這個物品？"
-          : "确认删除这个物品？";
+      ? l("Delete selected items?", "確定刪除選中物品？", "确认删除选中物品？")
+      : l("Delete this item?", "確定刪除這個物品？", "确认删除这个物品？");
 
   return (
     <>
@@ -209,28 +203,28 @@ export function SortableTripGroup({
               )
             }
           >
-            {lang === "en" ? "Select all" : lang === "zh-TW" ? "全選" : "全选"}
+            {l("Select all", "全選", "全选")}
           </button>
           <button type="button" className="brand-chip" onClick={() => setSelectedIds([])}>
-            {lang === "en" ? "Clear" : lang === "zh-TW" ? "清除" : "清空"}
+            {l("Clear", "清除", "清空")}
           </button>
-          <span>{lang === "en" ? `Selected ${validSelectedIds.length}` : lang === "zh-TW" ? `已選 ${validSelectedIds.length}` : `已选 ${validSelectedIds.length}`}</span>
+          <span>{l(`Selected ${validSelectedIds.length}`, `已選 ${validSelectedIds.length}`, `已选 ${validSelectedIds.length}`)}</span>
           <button type="button" className="brand-chip" onClick={() => setDeleteConfirm({ mode: "bulk" })}>
-            {lang === "en" ? "Delete" : lang === "zh-TW" ? "刪除" : "删除"}
+            {l("Delete", "刪除", "删除")}
           </button>
           <button type="button" className="brand-chip" onClick={() => handleBulk("save_to_locker")}>
-            {lang === "en" ? "Save to locker" : lang === "zh-TW" ? "加入裝備庫" : "加入装备库"}
+            {l("Save to locker", "加入裝備庫", "加入装备库")}
           </button>
           <div className="ml-auto flex items-center gap-2">
           <select className="ui-control-input ui-native-select h-8 min-w-[150px] text-[12px]" defaultValue="" onChange={(e) => { if (e.target.value) void handleBulk("set_status", e.target.value); }}>
-            <option value="">{lang === "en" ? "Set status..." : lang === "zh-TW" ? "狀態批量..." : "状态批量..."}</option>
+            <option value="">{l("Set status...", "狀態批量...", "状态批量...")}</option>
             <option value="to_pack">{statusMeta.to_pack ?? "to_pack"}</option>
             <option value="to_buy">{statusMeta.to_buy ?? "to_buy"}</option>
             <option value="optional">{statusMeta.optional ?? "optional"}</option>
             <option value="packed">{statusMeta.packed ?? "packed"}</option>
           </select>
           <select className="ui-control-input ui-native-select h-8 min-w-[146px] text-[12px]" defaultValue="" onChange={(e) => { if (e.target.value) void handleBulk("set_container", e.target.value); }}>
-            <option value="">{lang === "en" ? "Move to..." : lang === "zh-TW" ? "移動到..." : "移动到..."}</option>
+            <option value="">{l("Move to...", "移動到...", "移动到...")}</option>
             <option value="undecided">{containerMeta.undecided ?? "undecided"}</option>
             <option value="suitcase">{containerMeta.suitcase ?? "suitcase"}</option>
             <option value="backpack">{containerMeta.backpack ?? "backpack"}</option>
@@ -259,8 +253,8 @@ export function SortableTripGroup({
             formData.set("trip_id", tripId);
             formData.set("dragged_id", draggingId);
             formData.set("target_id", item.id);
-            formData.set("scope_field", scopeField);
-            formData.set("scope_value", group);
+              formData.set("scope_field", scopeField);
+              formData.set("scope_value", group === "all_items" ? "" : group);
             await reorderTripItemsByIds(formData);
             softRefresh();
           }}>
@@ -276,7 +270,7 @@ export function SortableTripGroup({
                       }}
                       onClick={(e) => e.stopPropagation()}
                       className="ui-round-check"
-                      aria-label={lang === "en" ? "Select item" : lang === "zh-TW" ? "選擇物品" : "选择物品"}
+                      aria-label={l("Select item", "選擇物品", "选择物品")}
                     />
                     <button type="button" className="item-title break-keep text-left" onClick={() => toggleSelected(item.id)}>
                       {item.name}
@@ -289,8 +283,8 @@ export function SortableTripGroup({
                     draggable
                     onDragStart={() => setDraggingId(item.id)}
                     className="list-row-action-icon drag-handle-btn"
-                    aria-label={lang === "en" ? "Drag to reorder" : lang === "zh-TW" ? "拖曳排序" : "拖动排序"}
-                    title={lang === "en" ? "Drag to reorder" : lang === "zh-TW" ? "拖曳排序" : "拖动排序"}
+                    aria-label={l("Drag to reorder", "拖曳排序", "拖动排序")}
+                    title={l("Drag to reorder", "拖曳排序", "拖动排序")}
                   >
                     <GripVertical size={13} strokeWidth={1.5} className="text-[#8a8680]" aria-hidden />
                   </button>
@@ -321,8 +315,8 @@ export function SortableTripGroup({
                     type="button"
                     className="list-row-action-icon"
                     onClick={() => setDeleteConfirm({ mode: "single", itemId: item.id })}
-                    aria-label={lang === "en" ? "Delete item" : lang === "zh-TW" ? "刪除物品" : "删除物品"}
-                    title={lang === "en" ? "Delete item" : lang === "zh-TW" ? "刪除物品" : "删除物品"}
+                    aria-label={l("Delete item", "刪除物品", "删除物品")}
+                    title={l("Delete item", "刪除物品", "删除物品")}
                   >
                     <Trash2 size={13} strokeWidth={1.5} className="text-[#8a4f39]" aria-hidden />
                   </button>
@@ -344,17 +338,17 @@ export function SortableTripGroup({
                 <div className="item-tag-row flex flex-wrap gap-2">
                   {item.source_locker_id ? (
                     <span className="status-tag status-tag-container">
-                      {lang === "en" ? "Source: Gear locker" : lang === "zh-TW" ? "來源：裝備庫" : "来源：装备库"}
+                      {l("Source: Gear locker", "來源：裝備庫", "来源：装备库")}
                     </span>
                   ) : null}
                   {showCategoryTag ? (
                     <span className="status-tag status-tag-container">
-                      {lang === "en" ? "Category: " : lang === "zh-TW" ? "分類：" : "分类："}
+                      {l("Category: ", "分類：", "分类：")}
                       {categoryMeta[item.category] ?? item.category}
                     </span>
                   ) : null}
                   <span className="status-tag status-tag-container">
-                    {lang === "en" ? "Location: " : lang === "zh-TW" ? "位置：" : "位置："}
+                    {l("Location: ", "位置：", "位置：")}
                     {containerMeta[item.container] ?? item.container}
                   </span>
                   <button
@@ -362,7 +356,7 @@ export function SortableTripGroup({
                     onClick={() => handleTogglePacked(item)}
                     className={`status-tag ${item.status === "to_pack" || item.status === "packed" ? "status-tag-must" : item.status === "to_buy" ? "status-tag-buy" : "status-tag-optional"}`}
                   >
-                    {lang === "en" ? "Status: " : lang === "zh-TW" ? "狀態：" : "状态："}
+                    {l("Status: ", "狀態：", "状态：")}
                     {item.status === "packed" ? `✓ ${statusMeta[item.status] ?? item.status}` : statusMeta[item.status] ?? item.status}
                   </button>
                 </div>
@@ -391,10 +385,10 @@ export function SortableTripGroup({
           <p className="text-[16px] text-[#1f1f1b]">{deleteConfirmText}</p>
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" className="brand-btn-soft px-3 py-2 text-[12px]" onClick={() => setDeleteConfirm(null)}>
-              {lang === "en" ? "Cancel" : lang === "zh-TW" ? "取消" : "取消"}
+              {l("Cancel", "取消", "取消")}
             </button>
             <button type="button" className="brand-btn-primary px-3 py-2 text-[12px]" onClick={() => void handleDeleteConfirm()}>
-              {lang === "en" ? "Confirm" : lang === "zh-TW" ? "確定" : "确定"}
+              {l("Confirm", "確定", "确定")}
             </button>
           </div>
         </div>

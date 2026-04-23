@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
+import { Suspense } from "react";
 import { Analytics } from "@vercel/analytics/next";
+import { GlobalNav } from "@/components/global-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,6 +28,9 @@ export default function RootLayout({
       }
     >
       <body className="min-h-full flex flex-col">
+        <Suspense fallback={<div className="h-[53px] border-b border-[#ddd5c8] bg-[#f4f1ec]" />}>
+          <GlobalNav />
+        </Suspense>
         {children}
         <Analytics />
       </body>

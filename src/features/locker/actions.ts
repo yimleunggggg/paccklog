@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/features/trips/server";
 import { normalizeItemCategory } from "@/shared/item-categories";
+import { ensureGearMasterId } from "@/server/gear-master";
 
 export async function addLockerItem(formData: FormData) {
   const { supabase, user } = await requireUser();
@@ -12,9 +13,16 @@ export async function addLockerItem(formData: FormData) {
   const note = String(formData.get("note") ?? "").trim();
   const status = String(formData.get("status") ?? "owned");
   if (!name) return;
+  const gearId = await ensureGearMasterId(supabase, {
+    name,
+    category: category || null,
+    brand: brand || null,
+    note: note || null,
+  });
 
   const { error } = await supabase.from("gear_locker").insert({
     user_id: user.id,
+    gear_id: gearId,
     name,
     category: category || null,
     brand: brand || null,
@@ -36,10 +44,17 @@ export async function updateLockerItem(formData: FormData) {
   const note = String(formData.get("note") ?? "").trim();
   const status = String(formData.get("status") ?? "owned");
   if (!name) return;
+  const gearId = await ensureGearMasterId(supabase, {
+    name,
+    category: category || null,
+    brand: brand || null,
+    note: note || null,
+  });
 
   const { error } = await supabase
     .from("gear_locker")
     .update({
+      gear_id: gearId,
       name,
       category: category || null,
       brand: brand || null,

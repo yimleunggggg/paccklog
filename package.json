@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "import:qc": "node scripts/generate-import-qc-report.mjs",
+    "import:community": "node scripts/generate-community-import-migration.mjs",
+    "import:community:qc": "node scripts/generate-community-import-qc.mjs",
+    "import:rei:cdp": "node scripts/extract-rei-cdp-batch.mjs",
     "brands:check": "tsx scripts/validate-brand-library.ts",
     "brands:sort": "tsx scripts/sort-brand-library.ts"
   },

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/features/trips/server";
 import { NewTripForm } from "@/features/trips/new-trip-form";
-import { HeaderIconMenus } from "@/components/header-icon-menus";
 import { resolveLang, texts } from "@/shared/i18n";
+import { pickLangText } from "@/shared/localized-text";
 
 export default async function NewTripPage({
   searchParams,
@@ -12,6 +12,7 @@ export default async function NewTripPage({
   const { lang: rawLang, error } = await searchParams;
   const lang = resolveLang(rawLang);
   const t = texts[lang];
+  const l = (en: string, zhTW: string, zhCN: string) => pickLangText(lang, { en, zhTW, zhCN });
   const { supabase } = await requireUser();
   const { data: templates } = await supabase
     .from("scene_templates")
@@ -21,7 +22,7 @@ export default async function NewTripPage({
 
   const errorMessage =
     error === "invalid_date_range"
-      ? (lang === "en" ? "Invalid date range. Please check start and end dates." : lang === "zh-TW" ? "日期範圍無效，請檢查開始與結束日期。" : "日期范围无效，请检查开始和结束日期。")
+      ? l("Invalid date range. Please check start and end dates.", "日期範圍無效，請檢查開始與結束日期。", "日期范围无效，请检查开始和结束日期。")
       : error;
 
   return (
@@ -30,7 +31,6 @@ export default async function NewTripPage({
         <Link href={`/?lang=${lang}`} className="text-sm underline">
           {t.backList}
         </Link>
-        <HeaderIconMenus lang={lang} />
       </div>
       <h1 className="mb-4 text-3xl text-[#1c1c18]" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>{t.createTrip}</h1>
       <NewTripForm templates={templates ?? []} lang={lang} error={errorMessage} />

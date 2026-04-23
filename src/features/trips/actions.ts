@@ -4,23 +4,43 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ensureUserProfile, normalizeItemName, requireUser } from "@/features/trips/server";
 import { normalizeItemCategory } from "@/shared/item-categories";
+import { pickLangText } from "@/shared/localized-text";
+import { ensureGearMasterId } from "@/server/gear-master";
 
 function getSeasonByMonth(month: number, lang: string) {
-  const isEn = lang === "en";
-  const isTw = lang === "zh-TW";
-  if ([3, 4, 5].includes(month)) return isEn ? "Spring" : isTw ? "春季" : "春季";
-  if ([6, 7, 8].includes(month)) return isEn ? "Summer" : isTw ? "夏季" : "夏季";
-  if ([9, 10, 11].includes(month)) return isEn ? "Autumn" : isTw ? "秋季" : "秋季";
-  return isEn ? "Winter" : isTw ? "冬季" : "冬季";
+  if ([3, 4, 5].includes(month)) return pickLangText(lang, { en: "Spring", zhTW: "春季", zhCN: "春季" });
+  if ([6, 7, 8].includes(month)) return pickLangText(lang, { en: "Summer", zhTW: "夏季", zhCN: "夏季" });
+  if ([9, 10, 11].includes(month)) return pickLangText(lang, { en: "Autumn", zhTW: "秋季", zhCN: "秋季" });
+  return pickLangText(lang, { en: "Winter", zhTW: "冬季", zhCN: "冬季" });
 }
 
 function buildPackingHint(season: string, lang: string) {
-  const isEn = lang === "en";
-  const isTw = lang === "zh-TW";
-  if (season === "Summer" || season === "夏季") return isEn ? "Quick-dry breathable wear, airy shoes, sun hat and sunscreen." : isTw ? "輕薄快乾、透氣鞋、遮陽帽、防曬。" : "轻薄速干、透气鞋、遮阳帽、防晒。";
-  if (season === "Winter" || season === "冬季") return isEn ? "Insulating mid-layer, windproof shell, warm socks and gloves." : isTw ? "保暖中層、防風外層、保暖襪與手套。" : "保暖中层、防风外层、保暖袜、手套。";
-  if (season === "Autumn" || season === "秋季") return isEn ? "Layering setup, light fleece and a wind-resistant jacket." : isTw ? "洋蔥式穿搭、薄抓絨、輕防風外套。" : "洋葱穿搭、薄抓绒、轻防风外套。";
-  return isEn ? "Layer-friendly outerwear, quick-dry base and light rain-ready gear." : isTw ? "可疊穿外套、快乾內層與防小雨裝備。" : "可叠穿外套、速干内层、防小雨装备。";
+  if (season === "Summer" || season === "夏季") {
+    return pickLangText(lang, {
+      en: "Quick-dry breathable wear, airy shoes, sun hat and sunscreen.",
+      zhTW: "輕薄快乾、透氣鞋、遮陽帽、防曬。",
+      zhCN: "轻薄速干、透气鞋、遮阳帽、防晒。",
+    });
+  }
+  if (season === "Winter" || season === "冬季") {
+    return pickLangText(lang, {
+      en: "Insulating mid-layer, windproof shell, warm socks and gloves.",
+      zhTW: "保暖中層、防風外層、保暖襪與手套。",
+      zhCN: "保暖中层、防风外层、保暖袜、手套。",
+    });
+  }
+  if (season === "Autumn" || season === "秋季") {
+    return pickLangText(lang, {
+      en: "Layering setup, light fleece and a wind-resistant jacket.",
+      zhTW: "洋蔥式穿搭、薄抓絨、輕防風外套。",
+      zhCN: "洋葱穿搭、薄抓绒、轻防风外套。",
+    });
+  }
+  return pickLangText(lang, {
+    en: "Layer-friendly outerwear, quick-dry base and light rain-ready gear.",
+    zhTW: "可疊穿外套、快乾內層與防小雨裝備。",
+    zhCN: "可叠穿外套、速干内层、防小雨装备。",
+  });
 }
 
 function hasDestinationConflict(templateName: string, country: string) {
@@ -35,10 +55,29 @@ function isMissingSourceLockerColumnError(error: unknown) {
   return message.includes("source_locker_id") && (message.includes("does not exist") || message.includes("column"));
 }
 
+function isMissingGearIdColumnError(error: unknown) {
+  const message = typeof error === "object" && error && "message" in error ? String((error as { message?: string }).message ?? "") : "";
+  return message.includes("gear_id") && (message.includes("does not exist") || message.includes("column"));
+}
+
 async function hasSourceLockerIdColumn(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"]) {
   const { error } = await supabase.from("trip_items").select("id,source_locker_id").limit(1);
   if (!error) return true;
   if (isMissingSourceLockerColumnError(error)) return false;
+  return true;
+}
+
+async function hasTripItemGearIdColumn(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"]) {
+  const { error } = await supabase.from("trip_items").select("id,gear_id").limit(1);
+  if (!error) return true;
+  if (isMissingGearIdColumnError(error)) return false;
+  return true;
+}
+
+async function hasLockerGearIdColumn(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"]) {
+  const { error } = await supabase.from("gear_locker").select("id,gear_id").limit(1);
+  if (!error) return true;
+  if (isMissingGearIdColumnError(error)) return false;
   return true;
 }
 
@@ -185,17 +224,22 @@ export async function createTripWithTemplates(formData: FormData) {
 
   const monthNumber = startDate.getMonth() + 1;
   const durationDays = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
-  const month = lang === "en" ? `${monthNumber}` : `${monthNumber}月`;
-  const duration = lang === "en" ? `${durationDays} days` : `${durationDays}天`;
+  const month = pickLangText(lang, { en: `${monthNumber}`, zhTW: `${monthNumber}月`, zhCN: `${monthNumber}月` });
+  const duration = pickLangText(lang, { en: `${durationDays} days`, zhTW: `${durationDays}天`, zhCN: `${durationDays}天` });
   const season = getSeasonByMonth(monthNumber, lang);
   const mainCity = selectedCities[0] ?? country ?? continent;
-  const mainScene = selectedSceneNames.length > 0 ? selectedSceneNames.slice(0, 2).join("") : (lang === "en" ? "Trip" : "行程");
-  const dayUnit = lang === "en" ? "d" : "日";
+  const mainScene =
+    selectedSceneNames.length > 0 ? selectedSceneNames.slice(0, 2).join("") : pickLangText(lang, { en: "Trip", zhTW: "行程", zhCN: "行程" });
+  const dayUnit = pickLangText(lang, { en: "d", zhTW: "日", zhCN: "日" });
   const autoTitle = `${mainCity} · ${mainScene} · ${durationDays}${dayUnit}`;
   const title = customTitle || autoTitle;
   const packingHint = buildPackingHint(season, lang);
   const tags = [continent, country, city, month, duration, season, travelStyle].filter(Boolean);
-  const autoHintPrefix = lang === "en" ? `Gear suggestion (${season}): ${packingHint}` : lang === "zh-TW" ? `裝備建議（${season}）：${packingHint}` : `装备建议(${season})：${packingHint}`;
+  const autoHintPrefix = pickLangText(lang, {
+    en: `Gear suggestion (${season}): ${packingHint}`,
+    zhTW: `裝備建議（${season}）：${packingHint}`,
+    zhCN: `装备建议(${season})：${packingHint}`,
+  });
   const mergedNote = [note, autoHintPrefix].filter(Boolean).join("\n");
 
   const { data: trip, error: tripError } = await supabase
@@ -270,6 +314,8 @@ export async function updateTripItem(formData: FormData): Promise<{
 }> {
   const { supabase, user } = await requireUser();
   const sourceLockerColumnReady = await hasSourceLockerIdColumn(supabase);
+  const tripItemGearIdColumnReady = await hasTripItemGearIdColumn(supabase);
+  const lockerGearIdColumnReady = await hasLockerGearIdColumn(supabase);
   const id = String(formData.get("id"));
   const name = String(formData.get("name") ?? "").trim();
   const status = String(formData.get("status"));
@@ -285,11 +331,13 @@ export async function updateTripItem(formData: FormData): Promise<{
     .map((value) => value.trim())
     .filter(Boolean);
   const saveToLocker = String(formData.get("save_to_locker") ?? "") === "true";
+  const gearId = await ensureGearMasterId(supabase, { name, category, brand: brand || null, note: note || null });
 
   const { data: updatedRow, error } = await supabase
     .from("trip_items")
     .update({
       ...(name ? { name } : {}),
+      ...(tripItemGearIdColumnReady ? { gear_id: gearId } : {}),
       category,
       status,
       container,
@@ -325,6 +373,7 @@ export async function updateTripItem(formData: FormData): Promise<{
       .from("gear_locker")
       .update({
         name,
+        ...(lockerGearIdColumnReady ? { gear_id: gearId } : {}),
         category,
         brand: brand || null,
         note: note || null,
@@ -344,6 +393,7 @@ export async function updateTripItem(formData: FormData): Promise<{
       await supabase
         .from("gear_locker")
         .update({
+          ...(lockerGearIdColumnReady ? { gear_id: gearId } : {}),
           brand: brand || null,
           note: note || null,
           status: "owned",
@@ -355,6 +405,7 @@ export async function updateTripItem(formData: FormData): Promise<{
     } else {
       const { data: insertedLocker } = await supabase.from("gear_locker").insert({
         user_id: user.id,
+        ...(lockerGearIdColumnReady ? { gear_id: gearId } : {}),
         name,
         category: normalizeItemCategory(String(formData.get("category") ?? "")),
         brand: brand || null,
@@ -437,6 +488,7 @@ export async function addTripItem(formData: FormData): Promise<{
   item?: { id: string; name: string; status: string; container: string };
 }> {
   const { supabase } = await requireUser();
+  const tripItemGearIdColumnReady = await hasTripItemGearIdColumn(supabase);
   const tripId = String(formData.get("trip_id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const categoryRaw = String(formData.get("category") ?? "other");
@@ -446,16 +498,27 @@ export async function addTripItem(formData: FormData): Promise<{
   const container = String(formData.get("container") ?? "undecided");
   const brand = String(formData.get("brand") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
+  const gearId = await ensureGearMasterId(supabase, { name, category, brand: brand || null, note: note || null });
 
   if (!tripId || !name) return { ok: false };
+  const { data: topRow } = await supabase
+    .from("trip_items")
+    .select("sort_order")
+    .eq("trip_id", tripId)
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const nextSortOrder = Number.isFinite(topRow?.sort_order) ? Number(topRow?.sort_order) - 10 : 10;
 
   const { data: inserted, error } = await supabase.from("trip_items").insert({
     trip_id: tripId,
+    ...(tripItemGearIdColumnReady ? { gear_id: gearId } : {}),
     name,
     category,
     status,
     container,
     quantity: 1,
+    sort_order: nextSortOrder,
     brand: brand || null,
     note: note || null,
   }).select("id,name,status,container").single();
@@ -532,18 +595,18 @@ export async function reorderTripItemsByIds(formData: FormData) {
   const tripId = String(formData.get("trip_id") ?? "");
   const draggedId = String(formData.get("dragged_id") ?? "");
   const targetId = String(formData.get("target_id") ?? "");
-  const scopeField = String(formData.get("scope_field") ?? "category");
+  const scopeField = String(formData.get("scope_field") ?? "all");
   const scopeValue = String(formData.get("scope_value") ?? "");
-  if (!tripId || !draggedId || !targetId || !scopeValue) return;
+  if (!tripId || !draggedId || !targetId) return;
 
   const query = supabase
     .from("trip_items")
     .select("id,sort_order")
     .eq("trip_id", tripId)
     .order("sort_order", { ascending: true });
-  if (scopeField === "container") {
+  if (scopeField === "container" && scopeValue) {
     query.eq("container", scopeValue);
-  } else {
+  } else if (scopeField === "category" && scopeValue) {
     query.eq("category", scopeValue);
   }
   const { data: rows } = await query;
@@ -637,6 +700,7 @@ export async function toggleTripArchived(formData: FormData) {
 export async function addLockerItemsToTrip(formData: FormData): Promise<{ ok: boolean; count: number; status: string; container: string; error?: string }> {
   const { supabase, user } = await requireUser();
   const sourceLockerColumnReady = await hasSourceLockerIdColumn(supabase);
+  const tripItemGearIdColumnReady = await hasTripItemGearIdColumn(supabase);
   const tripId = String(formData.get("trip_id") ?? "");
   const selectedIds = formData
     .getAll("locker_ids")
@@ -658,7 +722,7 @@ export async function addLockerItemsToTrip(formData: FormData): Promise<{ ok: bo
 
   const { data: lockerItems } = await supabase
     .from("gear_locker")
-    .select("id,name,category,brand,note")
+    .select("id,name,category,brand,note,gear_id")
     .eq("user_id", user.id)
     .in("id", selectedIds);
   if (!lockerItems?.length) {
@@ -687,6 +751,7 @@ export async function addLockerItemsToTrip(formData: FormData): Promise<{ ok: bo
     .map((item) => ({
     trip_id: tripId,
     ...(sourceLockerColumnReady ? { source_locker_id: item.id } : {}),
+    ...(tripItemGearIdColumnReady ? { gear_id: item.gear_id ?? null } : {}),
     name: item.name,
     category: normalizeItemCategory(item.category || "other"),
     status: targetStatus,
@@ -749,9 +814,10 @@ export async function bulkOperateTripItems(formData: FormData): Promise<{ ok: bo
   }
 
   if (action === "save_to_locker") {
+    const lockerGearIdColumnReady = await hasLockerGearIdColumn(supabase);
     const { data: rows } = await supabase
       .from("trip_items")
-      .select("name,category,brand,note")
+      .select("name,category,brand,note,gear_id")
       .eq("trip_id", tripId)
       .in("id", ids);
     const items = rows ?? [];
@@ -768,6 +834,7 @@ export async function bulkOperateTripItems(formData: FormData): Promise<{ ok: bo
         await supabase
           .from("gear_locker")
           .update({
+            ...(lockerGearIdColumnReady ? { gear_id: item.gear_id ?? null } : {}),
             category: normalizeItemCategory(String(item.category ?? "")),
             brand: item.brand || null,
             note: item.note || null,
@@ -778,6 +845,7 @@ export async function bulkOperateTripItems(formData: FormData): Promise<{ ok: bo
       } else {
         await supabase.from("gear_locker").insert({
           user_id: user.id,
+          ...(lockerGearIdColumnReady ? { gear_id: item.gear_id ?? null } : {}),
           name,
           category: normalizeItemCategory(String(item.category ?? "")),
           brand: item.brand || null,

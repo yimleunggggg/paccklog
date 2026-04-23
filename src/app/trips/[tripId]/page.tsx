@@ -1,16 +1,25 @@
 import Link from "next/link";
 import { CalendarDays, CircleDot, MapPin } from "lucide-react";
-import { addTripItem, saveTripAsTemplate } from "@/features/trips/actions";
-import { requireUser } from "@/features/trips/server";
-import { HeaderIconMenus } from "@/components/header-icon-menus";
+import { saveTripAsTemplate } from "@/features/trips/actions";
 import { LockerPickerSheet } from "@/components/locker-picker-sheet";
 import { QuickAddForm } from "@/components/quick-add-form";
 import { SortableTripGroup } from "@/components/sortable-trip-group";
 import { TripContainerGroups } from "@/components/trip-container-groups";
 import { TripShareActions } from "@/components/trip-share-actions";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveLang, texts } from "@/shared/i18n";
 import { getTripWeather } from "@/lib/weather";
-import { getItemCategoryOptions, normalizeItemCategory } from "@/shared/item-categories";
+import { getItemCategoryOptions } from "@/shared/item-categories";
+import { localeForLang, pickLangText } from "@/shared/localized-text";
+
+function formatDateRange(start: string | null, end: string | null, lang: string) {
+  if (!start) return "--";
+  const locale = localeForLang(lang);
+  const fmt = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" });
+  const startStr = fmt.format(new Date(start));
+  const endStr = end ? fmt.format(new Date(end)) : "--";
+  return `${startStr} – ${endStr}`;
+}
 
 type TripDetailPageProps = {
   params: Promise<{ tripId: string }>;
@@ -27,7 +36,34 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
   const allowedContainers = new Set(["undecided", "suitcase", "backpack", "carry_on", "wear"]);
   const containerFilter = query.container && allowedContainers.has(query.container) ? query.container : "";
   const t = texts[lang];
-  const { supabase, user } = await requireUser();
+  const l = (en: string, zhTW: string, zhCN: string) => pickLangText(lang, { en, zhTW, zhCN });
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData.user;
+  if (!user) {
+    return (
+      <main className="packlog-page mx-auto w-full max-w-[980px] p-4 md:p-6">
+        <h1 className="text-2xl text-[#1c1c18]" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>
+          {t.tripDetail}
+        </h1>
+        <p className="mt-2 text-sm text-[#6f6b62]">
+          {lang === "en"
+            ? "Trip detail is personal data. Login starts only when creating your personal trip."
+            : lang === "zh-TW"
+              ? "行程詳情屬於個人資料。只有在建立個人行程時才會啟動登入。"
+              : "行程详情属于个人数据。只有在创建个人行程时才会发起登录。"}
+        </p>
+        <div className="mt-4 flex gap-2">
+          <Link href={`/explore?lang=${lang}`} className="brand-btn-soft px-4 py-2 text-sm">
+            {t.explore}
+          </Link>
+          <Link href={`/trips/new?lang=${lang}`} className="brand-btn-primary px-4 py-2 text-sm">
+            {t.newTrip}
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   const { data: trip } = await supabase.from("trips").select("id,title,status,start_date,end_date,tags,description").eq("id", tripId).single();
   const [{ data: allTripItems }, { data: lockerItems }] = await Promise.all([
@@ -59,17 +95,32 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
           return acc;
           }, {})
         : { all_items: items };
+  const scopeFieldForList: "all" | "category" | "container" =
+    view === "container" ? "container" : view === "category" ? "category" : "all";
   const statusMeta: Record<string, string> = {
-    all: t.statusAll?.trim() || (lang === "en" ? "All" : "全部"),
-    to_pack: t.statusToPack?.trim() || (lang === "en" ? "To pack" : "待打包"),
-    packed: t.statusPacked?.trim() || (lang === "en" ? "Packed" : "已打包"),
-    to_buy: t.statusToBuy?.trim() || (lang === "en" ? "To buy" : "待购买"),
-    optional: t.statusOptional?.trim() || (lang === "en" ? "Optional" : "可选"),
+    all: t.statusAll?.trim() || l("All", "全部", "全部"),
+    to_pack: t.statusToPack?.trim() || l("To pack", "待打包", "待打包"),
+    packed: t.statusPacked?.trim() || l("Packed", "已打包", "已打包"),
+    to_buy: t.statusToBuy?.trim() || l("To buy", "待购买", "待购买"),
+    optional: t.statusOptional?.trim() || l("Optional", "可选", "可选"),
+  };
+  const statusLabel = (value?: string | null) => {
+    if (!value) return "";
+    return statusMeta[value] ?? value;
   };
   const statusFilters = ["all", "to_pack", "packed", "to_buy", "optional"] as const;
-  const categoryViewLabel = t.categoryView?.trim() || (lang === "en" ? "Category view" : "分类视图");
-  const containerViewLabel = t.containerView?.trim() || (lang === "en" ? "By container" : "按容器");
-  const allViewLabel = lang === "en" ? "All view" : lang === "zh-TW" ? "全部視圖" : "全局视图";
+  const categoryViewLabel = t.categoryView?.trim() || l("Category view", "分類視圖", "分类视图");
+  const containerViewLabel = t.containerView?.trim() || l("By container", "按容器", "按容器");
+  const allViewLabel = l("All view", "全部視圖", "全局视图");
+  const rainLabel = l("Rain", "降雨", "降雨");
+  const categoryDistributionLabel = l("Category distribution", "分類分布", "分类分布");
+  const containerDistributionLabel = l("Container distribution", "容器分布", "容器分布");
+  const packedRatioLabel = l("Packed ratio", "已打包進度", "已打包进度");
+  const quickAddLabel = l("Add", "新增", "添加");
+  const optionalHintLabel = l("optional", "可選", "可选");
+  const noteOptionalLabel = l("Note (optional)", "備註（可選）", "备注（可选）");
+  const lockerLinkedHintText = l("Already linked to Gear Locker. Edits auto-sync.", "已關聯裝備庫，編輯將自動同步。", "已关联装备库，编辑将自动同步。");
+  const allItemsSectionLabel = l("ALL ITEMS", "全部物品", "全部物品");
   const containerMeta: Record<string, string> = {
     undecided: t.containerUndecided,
     suitcase: t.containerSuitcase,
@@ -175,7 +226,7 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
                   <Link href={`/trips/${entry.id}?lang=${lang}`} className="block text-sm text-[#2f2d29]">
                     {entry.title}
                   </Link>
-                  <p className="text-[11px] text-[#8c8880]">{entry.status}</p>
+                  <p className="text-[11px] text-[#8c8880]">{statusLabel(entry.status)}</p>
                 </li>
               ))}
             </ul>
@@ -186,7 +237,6 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
         <Link href={`/?lang=${lang}`} className="text-sm underline">
           {t.backList}
         </Link>
-        <HeaderIconMenus lang={lang} />
       </div>
       <section className="mb-5 rounded-[20px] bg-[#17361f] p-5 text-[#f1f5ee]">
         <p className="text-[12px] tracking-[0.08em] text-[#9fbc97]">
@@ -197,7 +247,7 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
         </h1>
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="hero-chip">
-            <CalendarDays size={12} /> {(trip?.start_date ?? "--")} — {(trip?.end_date ?? "--")}
+            <CalendarDays size={12} /> {formatDateRange(trip?.start_date ?? null, trip?.end_date ?? null, lang)}
           </span>
           {durationTag ? (
             <span className="hero-chip">
@@ -261,7 +311,7 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
               {weather?.minTempC ?? "--"}° ~ {weather?.maxTempC ?? "--"}°
             </p>
             <p className="mt-2 text-[11px] text-[#7a766d]">
-              {lang === "en" ? "Rain" : lang === "zh-TW" ? "降雨" : "降雨"}: {weather?.rainSumMm ?? "--"}mm
+              {rainLabel}: {weather?.rainSumMm ?? "--"}mm
             </p>
           </div>
           <div className="rounded-[10px] border border-[#e5ddd0] bg-[#f8f5ef] px-3 py-3">
@@ -310,6 +360,40 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
         </Link>
       </div>
       <p className={`ui-filter-hint mb-3 ${items.length === 0 ? "ui-filter-hint-empty" : ""}`}>{filterHint}</p>
+      <section className="mb-4 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-[10px] border border-[#e1d9cd] bg-[#fefcf8] px-3 py-2">
+          <p className="text-[11px] text-[#8c8880]">{categoryDistributionLabel}</p>
+          <p className="mt-1 text-[12px] text-[#4a4840]">
+            {Object.entries(
+              (items ?? []).reduce<Record<string, number>>((acc, item) => {
+                acc[item.category] = (acc[item.category] ?? 0) + 1;
+                return acc;
+              }, {}),
+            )
+              .slice(0, 3)
+              .map(([key, count]) => `${categoryMeta[key] ?? key} ${count}${l("", "件", "件")}`)
+              .join(" · ") || "--"}
+          </p>
+        </div>
+        <div className="rounded-[10px] border border-[#e1d9cd] bg-[#fefcf8] px-3 py-2">
+          <p className="text-[11px] text-[#8c8880]">{containerDistributionLabel}</p>
+          <p className="mt-1 text-[12px] text-[#4a4840]">
+            {Object.entries(
+              (items ?? []).reduce<Record<string, number>>((acc, item) => {
+                acc[item.container] = (acc[item.container] ?? 0) + 1;
+                return acc;
+              }, {}),
+            )
+              .slice(0, 3)
+              .map(([key, count]) => `${containerMeta[key] ?? key} ${count}${l("", "件", "件")}`)
+              .join(" · ") || "--"}
+          </p>
+        </div>
+        <div className="rounded-[10px] border border-[#e1d9cd] bg-[#fefcf8] px-3 py-2">
+          <p className="text-[11px] text-[#8c8880]">{packedRatioLabel}</p>
+          <p className="mt-1 text-[12px] text-[#4a4840]">{packed}/{total} · {progress}%</p>
+        </div>
+      </section>
       <section className="mb-5 rounded-xl border border-[#d8d0c4] bg-[#fefcf8] p-3">
         <div className="mb-2 flex justify-end">
           <LockerPickerSheet
@@ -323,11 +407,11 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
         <QuickAddForm
           tripId={tripId}
           quickAddPlaceholder={t.quickAddBar}
-          addLabel={lang === "en" ? "Add" : lang === "zh-TW" ? "新增" : "添加"}
+          addLabel={quickAddLabel}
           defaultStatus={statusFilter === "to_buy" || statusFilter === "optional" || statusFilter === "packed" ? statusFilter : "to_pack"}
           brandLabel={t.brand}
-          brandOptionalHint={lang === "en" ? "optional" : lang === "zh-TW" ? "可選" : "可选"}
-          noteLabel={lang === "en" ? "Note (optional)" : lang === "zh-TW" ? "備註（可選）" : "备注（可选）"}
+          brandOptionalHint={optionalHintLabel}
+          noteLabel={noteOptionalLabel}
           categories={categoryOptions}
         />
       </section>
@@ -346,7 +430,7 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
             saveText={t.save}
             cancelText={t.confirmCancel}
             saveToLockerText={t.saveToGearLocker}
-            lockerLinkedHintText={lang === "en" ? "Already linked to Gear Locker. Edits auto-sync." : lang === "zh-TW" ? "已關聯裝備庫，編輯將自動同步。" : "已关联装备库，编辑将自动同步。"}
+            lockerLinkedHintText={lockerLinkedHintText}
             brandPlaceholder={t.brand}
             brandAlternativesPlaceholder={t.brandAlternativesPlaceholder}
             notePlaceholder={t.noteField}
@@ -365,67 +449,91 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
         ) : (
           Object.entries(grouped).map(([group, groupItems], groupIndex) => (
             <section key={group}>
-              <div className="section-head">
-                <span className="section-index">{String(groupIndex + 1).padStart(2, "0")}</span>
-                <span className="section-name">{group === "all_items" ? (lang === "en" ? "ALL ITEMS" : "全部物品") : group.replace(/_/g, " ").toUpperCase()}</span>
-                <span className="section-count">{groupItems?.length ?? 0}</span>
-              </div>
-              <SortableTripGroup
-                key={`${group}:${(groupItems ?? []).map((item) => `${item.id}:${item.status}:${item.container}:${item.category}`).join("|")}`}
-                items={groupItems ?? []}
-                tripId={tripId}
-                group={group}
-                scopeField={view === "container" ? "container" : "category"}
-                mode={mode}
-                lang={lang}
-                statusMeta={statusMeta}
-                containerMeta={containerMeta}
-                categoryMeta={categoryMeta}
-                categoryOptions={categoryOptions}
-                showCategoryTag={view !== "category"}
-                saveText={t.save}
-                cancelText={t.confirmCancel}
-                saveToLockerText={t.saveToGearLocker}
-                lockerLinkedHintText={lang === "en" ? "Already linked to Gear Locker. Edits auto-sync." : lang === "zh-TW" ? "已關聯裝備庫，編輯將自動同步。" : "已关联装备库，编辑将自动同步。"}
-                brandPlaceholder={t.brand}
-                brandAlternativesPlaceholder={t.brandAlternativesPlaceholder}
-                notePlaceholder={t.noteField}
-                editLabel={t.advancedEdit}
-                savePendingText={t.savePending}
-                saveSuccessText={t.saveSuccess}
-                saveFailedText={t.saveFailed}
-                tripStatus={trip?.status}
-                reviewLabels={[
-                  { value: "used", label: t.reviewUsed },
-                  { value: "unused", label: t.reviewUnused },
-                  { value: "missed", label: t.reviewMissed },
-                  { value: "skip", label: t.reviewSkip },
-                ]}
-              />
+              {view === "category" ? (
+                <details className="section-group" open={groupIndex === 0}>
+                  <summary className="section-head cursor-pointer list-none">
+                    <span className="section-index">{String(groupIndex + 1).padStart(2, "0")}</span>
+                    <span className="section-name">{group === "all_items" ? allItemsSectionLabel : group.replace(/_/g, " ").toUpperCase()}</span>
+                    <span className="section-count">{groupItems?.length ?? 0}</span>
+                  </summary>
+                  <SortableTripGroup
+                    key={`${group}:${(groupItems ?? []).map((item) => `${item.id}:${item.status}:${item.container}:${item.category}`).join("|")}`}
+                    items={groupItems ?? []}
+                    tripId={tripId}
+                    group={group}
+                    scopeField={scopeFieldForList}
+                    mode={mode}
+                    lang={lang}
+                    statusMeta={statusMeta}
+                    containerMeta={containerMeta}
+                    categoryMeta={categoryMeta}
+                    categoryOptions={categoryOptions}
+                    showCategoryTag={view !== "category"}
+                    saveText={t.save}
+                    cancelText={t.confirmCancel}
+                    saveToLockerText={t.saveToGearLocker}
+                    lockerLinkedHintText={lockerLinkedHintText}
+                    brandPlaceholder={t.brand}
+                    brandAlternativesPlaceholder={t.brandAlternativesPlaceholder}
+                    notePlaceholder={t.noteField}
+                    editLabel={t.advancedEdit}
+                    savePendingText={t.savePending}
+                    saveSuccessText={t.saveSuccess}
+                    saveFailedText={t.saveFailed}
+                    tripStatus={trip?.status}
+                    reviewLabels={[
+                      { value: "used", label: t.reviewUsed },
+                      { value: "unused", label: t.reviewUnused },
+                      { value: "missed", label: t.reviewMissed },
+                      { value: "skip", label: t.reviewSkip },
+                    ]}
+                  />
+                </details>
+              ) : (
+                <>
+                  <div className="section-head">
+                    <span className="section-index">{String(groupIndex + 1).padStart(2, "0")}</span>
+                    <span className="section-name">{group === "all_items" ? allItemsSectionLabel : group.replace(/_/g, " ").toUpperCase()}</span>
+                    <span className="section-count">{groupItems?.length ?? 0}</span>
+                  </div>
+                  <SortableTripGroup
+                    key={`${group}:${(groupItems ?? []).map((item) => `${item.id}:${item.status}:${item.container}:${item.category}`).join("|")}`}
+                    items={groupItems ?? []}
+                    tripId={tripId}
+                    group={group}
+                    scopeField={scopeFieldForList}
+                    mode={mode}
+                    lang={lang}
+                    statusMeta={statusMeta}
+                    containerMeta={containerMeta}
+                    categoryMeta={categoryMeta}
+                    categoryOptions={categoryOptions}
+                    showCategoryTag={view !== "category"}
+                    saveText={t.save}
+                    cancelText={t.confirmCancel}
+                    saveToLockerText={t.saveToGearLocker}
+                    lockerLinkedHintText={lockerLinkedHintText}
+                    brandPlaceholder={t.brand}
+                    brandAlternativesPlaceholder={t.brandAlternativesPlaceholder}
+                    notePlaceholder={t.noteField}
+                    editLabel={t.advancedEdit}
+                    savePendingText={t.savePending}
+                    saveSuccessText={t.saveSuccess}
+                    saveFailedText={t.saveFailed}
+                    tripStatus={trip?.status}
+                    reviewLabels={[
+                      { value: "used", label: t.reviewUsed },
+                      { value: "unused", label: t.reviewUnused },
+                      { value: "missed", label: t.reviewMissed },
+                      { value: "skip", label: t.reviewSkip },
+                    ]}
+                  />
+                </>
+              )}
             </section>
           ))
         )}
       </section>
-
-      <section className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#d8d0c4] bg-[#f4f1ec] p-3 md:hidden">
-        <form action={async (formData) => {
-          "use server";
-          await addTripItem(formData);
-        }} className="mx-auto flex w-full max-w-5xl gap-2">
-          <input type="hidden" name="trip_id" value={tripId} />
-          <input type="hidden" name="category" value={normalizeItemCategory("other")} />
-          <input
-            required
-            name="name"
-            placeholder={t.quickAddBar}
-            className="flex-1 rounded-xl border px-3 py-2 text-sm"
-          />
-          <button type="submit" name="status" value="to_pack" className="brand-btn-primary px-3 py-2 text-xs">
-            +{t.statusToPack}
-          </button>
-        </form>
-      </section>
-
 
         </div>
         <aside className="hidden xl:block">

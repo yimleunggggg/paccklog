@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { LockerItemEditor } from "@/components/locker-item-editor";
+import { defaultZhNameFallback, defaultZhNoteFallback, pickLangText, resolveLocalizedText } from "@/shared/localized-text";
 
 type LockerItem = {
   id: string;
@@ -57,26 +58,41 @@ export function LockerFilteredList({
     status: string;
   };
 }) {
+  const l = (en: string, zhTW: string, zhCN: string) => pickLangText(lang, { en, zhTW, zhCN });
+  const localizedLang = pickLangText(lang, { en: "en", zhTW: "zh-TW", zhCN: "zh-CN" }) as "en" | "zh-TW" | "zh-CN";
   const [status, setStatus] = useState<"all" | "owned" | "wishlist">(initialStatus);
   const [category, setCategory] = useState(initialCategory);
   const [keywordInput, setKeywordInput] = useState(initialBrand);
   const [appliedKeyword, setAppliedKeyword] = useState(initialBrand);
-  const noteText = lang === "en" ? "Note" : lang === "zh-TW" ? "備註" : "备注";
-  const historyText = lang === "en" ? "Usage log" : lang === "zh-TW" ? "使用記錄" : "使用记录";
-  const optionalText = lang === "en" ? "optional" : lang === "zh-TW" ? "可選" : "可选";
+  const noteText = l("Note", "備註", "备注");
+  const historyText = l("Usage log", "使用記錄", "使用记录");
+  const optionalText = l("optional", "可選", "可选");
   const statusLabel = (value: string) => {
-    if (value === "packed") return lang === "en" ? "Packed" : lang === "zh-TW" ? "已打包" : "已打包";
-    if (value === "to_buy") return lang === "en" ? "To buy" : lang === "zh-TW" ? "待購買" : "待购买";
-    if (value === "optional") return lang === "en" ? "Optional" : lang === "zh-TW" ? "再說" : "再说";
-    return lang === "en" ? "To pack" : lang === "zh-TW" ? "待打包" : "待打包";
+    if (value === "packed") return l("Packed", "已打包", "已打包");
+    if (value === "to_buy") return l("To buy", "待購買", "待购买");
+    if (value === "optional") return l("Optional", "再說", "再说");
+    return l("To pack", "待打包", "待打包");
   };
   const containerLabel = (value: string) => {
-    if (value === "suitcase") return lang === "en" ? "Suitcase" : lang === "zh-TW" ? "托運行李箱" : "托运行李箱";
-    if (value === "backpack") return lang === "en" ? "Backpack" : lang === "zh-TW" ? "背包" : "背包";
-    if (value === "carry_on") return lang === "en" ? "Carry-on" : lang === "zh-TW" ? "隨身包" : "随身包";
-    if (value === "wear") return lang === "en" ? "On body" : lang === "zh-TW" ? "身上穿戴" : "身上穿戴";
-    return lang === "en" ? "Unsorted" : lang === "zh-TW" ? "未分類" : "未分类";
+    if (value === "suitcase") return l("Suitcase", "托運行李箱", "托运行李箱");
+    if (value === "backpack") return l("Backpack", "背包", "背包");
+    if (value === "carry_on") return l("Carry-on", "隨身包", "随身包");
+    if (value === "wear") return l("On body", "身上穿戴", "身上穿戴");
+    return l("Unsorted", "未分類", "未分类");
   };
+  const getLocalizedLockerName = (item: LockerItem) =>
+    resolveLocalizedText({
+      lang: localizedLang,
+      source: item.name,
+      zhFallback: (raw) => defaultZhNameFallback(raw),
+    });
+  const getLocalizedLockerNote = (item: LockerItem) =>
+    resolveLocalizedText({
+      lang: localizedLang,
+      source: item.note,
+      zhFallbackSource: item.name,
+      zhFallback: (raw, nameSource) => defaultZhNoteFallback(raw, nameSource || ""),
+    });
 
   const visibleItems = useMemo(() => {
     return items.filter((item) => {
@@ -172,7 +188,7 @@ export function LockerFilteredList({
             <div className="section-head">
               <span className="section-index">{String(index + 1).padStart(2, "0")}</span>
               <span className="section-name">
-                {lang === "en" ? String(categoryLabelMap.get(group) ?? group).toUpperCase() : categoryLabelMap.get(group) ?? group}
+                {localizedLang === "en" ? String(categoryLabelMap.get(group) ?? group).toUpperCase() : categoryLabelMap.get(group) ?? group}
               </span>
               <span className="section-count">{groupItems.length}</span>
             </div>
@@ -182,13 +198,13 @@ export function LockerFilteredList({
                   <div className="locker-row-main">
                     <div className="locker-row-left">
                       <div className="min-w-0 locker-row-text">
-                        <p className="locker-item-name text-[#1f1f1b]">{item.name}</p>
+                        <p className="locker-item-name text-[#1f1f1b]">{getLocalizedLockerName(item)}</p>
                         {item.brand ? (
                           <p className="locker-item-brand text-[#7b7770]" style={{ fontFamily: "EB Garamond, serif" }}>
                             {item.brand}
                           </p>
                         ) : null}
-                        {item.note ? <p className="locker-item-note item-manual-note-line">{item.note}</p> : null}
+                        {item.note ? <p className="locker-item-note item-manual-note-line">{getLocalizedLockerNote(item)}</p> : null}
                         {item.usage_logs?.length ? (
                           <details className="mt-1">
                             <summary className="cursor-pointer text-[12px] text-[#6f6b62]">
@@ -200,19 +216,19 @@ export function LockerFilteredList({
                                   <a
                                     href={`/trips/${log.trip_id}?lang=${lang}`}
                                     className="text-[#3d3a33] underline-offset-2 hover:underline"
-                                    title={lang === "en" ? "Open trip detail" : lang === "zh-TW" ? "打開行程詳情" : "打开行程详情"}
+                                    title={l("Open trip detail", "打開行程詳情", "打开行程详情")}
                                   >
                                     {log.trip_title}
                                   </a>
                                   <p>{log.trip_date}</p>
                                   <p>
-                                    {lang === "en" ? "Status: " : lang === "zh-TW" ? "狀態：" : "状态："}
+                                    {l("Status: ", "狀態：", "状态：")}
                                     {statusLabel(log.status)}
                                     {" · "}
-                                    {lang === "en" ? "Location: " : lang === "zh-TW" ? "位置：" : "位置："}
+                                    {l("Location: ", "位置：", "位置：")}
                                     {containerLabel(log.container)}
                                   </p>
-                                  {log.note ? <p>{lang === "en" ? "Note: " : lang === "zh-TW" ? "備註：" : "备注："}{log.note}</p> : null}
+                                  {log.note ? <p>{l("Note: ", "備註：", "备注：")}{log.note}</p> : null}
                                 </div>
                               ))}
                             </div>
@@ -224,16 +240,16 @@ export function LockerFilteredList({
                       <p className="locker-used-times text-[#8c8880]" style={{ fontFamily: "EB Garamond, serif" }}>
                         {(() => {
                           const usageCount = Math.max(item.times_used ?? 0, item.usage_logs?.length ?? 0);
-                          return lang === "en" ? `Used ${usageCount}x` : `${texts.usedTimes} ${usageCount}${texts.usedTimesUnit}`;
+                          return localizedLang === "en" ? `Used ${usageCount}x` : `${texts.usedTimes} ${usageCount}${texts.usedTimesUnit}`;
                         })()}
                       </p>
                       <LockerItemEditor
                         item={item}
-                        editText={lang === "en" ? "Edit" : "编辑"}
+                        editText={l("Edit", "編輯", "编辑")}
                         saveText={texts.save}
                         cancelText={texts.confirmCancel}
                         deleteText={texts.delete}
-                        confirmText={`${texts.delete}「${item.name}」？`}
+                        confirmText={`${texts.delete}「${getLocalizedLockerName(item)}」？`}
                         ownedText={texts.owned}
                         wishlistText={texts.wishlist}
                         itemNameLabel={texts.itemName}

@@ -13,9 +13,9 @@
 
 ## 核心原则
 
-- 默认所有内容支持多语展示，并维护条目级多语字段（`name_zh/name_en`, `note_zh/note_en`, `tags_zh/tags_en`）。
-- 前端统一走 `lang -> 字段选择` 渲染管线，避免中英混杂。
-- 在线能力用于翻译补齐与术语标准化，但结果要写回对应多语字段，不依赖一次性运行时兜底。
+- 默认保留原始内容（`name`/`note`）作为主数据，多语字段（`name_zh/name_en`, `note_zh/note_en`, `tags_zh/tags_en`）是可选增强层。
+- 前端统一走 `lang -> 字段选择` 渲染管线，目标语缺失时采用运行时兜底翻译，避免中英混杂。
+- 在线翻译按需触发，不做全量翻译落库；仅对高频内容做可控缓存（可设置 TTL/版本）。
 - 品牌是强一致字段：必须落到标准品牌库，避免同品牌多写法污染。
 
 ---
@@ -62,11 +62,10 @@
 - 状态映射到 PACKLOG 枚举（to_pack/to_buy/optional/packed）
 - 容器映射到 PACKLOG 枚举（suitcase/backpack/carry_on/wear/undecided）
 - 品牌识别并映射品牌库标准名（支持别名、大小写、语种混写）
-- 翻译与术语标准化（固定步骤）：
-  - 生成 `name_zh/name_en`
-  - 生成 `note_zh/note_en`
-  - 生成 `tags_zh/tags_en`
-  - 保证术语在同一语种内一致（如“速干/quick-dry”）
+- 翻译与术语标准化（按需步骤）：
+  - 优先保留来源原文，不强制生成全量 `*_zh/*_en`。
+  - 可对关键模板/高频条目补写 `name_zh/name_en`、`note_zh/note_en`、`tags_zh/tags_en`。
+  - 保证术语在同一语种内一致（如“速干/quick-dry”）。
 
 ### 3) 入库阶段（Persist）
 
@@ -93,14 +92,15 @@
 
 ### A. 固化到库（结构化多语层）
 
-- 条目名：`name_zh` / `name_en`
-- 推荐理由：`note_zh` / `note_en`
-- 关键词：`tags_zh` / `tags_en`
+- 条目名：`name`（必填），`name_zh/name_en`（可选）
+- 推荐理由：`note`（必填），`note_zh/note_en`（可选）
+- 关键词：`tags_zh/tags_en`（可选）
 - 结构字段：`category/status/container/brand/source metadata`
 
 ### B. 在线能力（生成与校对层）
 
-- 抽取后自动翻译补齐缺失字段
+- 目标语缺失时按需翻译（请求时生成）
+- 高频内容可缓存翻译结果（非全量）
 - 术语统一（品牌、材质、规格词）
 - 导入后质量复核（语义偏差、术语冲突、可读性）
 

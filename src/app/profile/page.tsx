@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireUser } from "@/features/trips/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveLang, texts } from "@/shared/i18n";
 
 export default async function ProfilePage({
@@ -10,7 +10,32 @@ export default async function ProfilePage({
   const { lang: rawLang } = await searchParams;
   const lang = resolveLang(rawLang);
   const t = texts[lang];
-  const { supabase } = await requireUser();
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return (
+      <main className="packlog-page mx-auto w-full max-w-[980px] p-4 md:p-6">
+        <h1 className="text-2xl" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>
+          {t.myTemplateLibrary}
+        </h1>
+        <p className="mt-2 text-sm text-[#6f6b62]">
+          {lang === "en"
+            ? "Template library is personal. Login starts only when creating your personal trip."
+            : lang === "zh-TW"
+              ? "模板庫屬於個人空間。只有在建立個人行程時才會啟動登入。"
+              : "模板库属于个人空间。只有在创建个人行程时才会发起登录。"}
+        </p>
+        <div className="mt-4 flex gap-2">
+          <Link href={`/explore?lang=${lang}`} className="brand-btn-soft px-4 py-2 text-sm">
+            {t.explore}
+          </Link>
+          <Link href={`/trips/new?lang=${lang}`} className="brand-btn-primary px-4 py-2 text-sm">
+            {t.newTrip}
+          </Link>
+        </div>
+      </main>
+    );
+  }
   const { data: templates } = await supabase
     .from("trip_templates")
     .select("id,name,created_at,scenes")

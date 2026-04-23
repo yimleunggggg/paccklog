@@ -1,11 +1,8 @@
 import Link from "next/link";
 import { CommunityExploreClient } from "@/components/community-explore-client";
-import { requireUser } from "@/features/trips/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveLang, texts, type Lang } from "@/shared/i18n";
-
-function hasCjk(text: string | null | undefined) {
-  return /[\u4e00-\u9fff]/.test(text ?? "");
-}
+import { hasCjkText } from "@/shared/localized-text";
 
 export default async function ExplorePage({
   searchParams,
@@ -14,8 +11,9 @@ export default async function ExplorePage({
 }) {
   const { lang: rawLang, preview } = await searchParams;
   const lang = resolveLang(rawLang);
-  const { supabase } = await requireUser();
-  const [{ data: templates }, { data: tripOptions }] = await Promise.all([
+  const supabase = await createSupabaseServerClient();
+  const [{ data: userData }, { data: templates }, { data: sceneTemplates }] = await Promise.all([
+    supabase.auth.getUser(),
     supabase
       .from("community_templates")
       .select(
@@ -23,8 +21,11 @@ export default async function ExplorePage({
       )
       .order("is_featured", { ascending: false })
       .order("created_at", { ascending: false }),
-    supabase.from("trips").select("id,title").order("created_at", { ascending: false }).limit(30),
+    supabase.from("scene_templates").select("id,name_zh,name_en,category").order("is_system", { ascending: false }).order("name_zh"),
   ]);
+  const tripOptions = userData?.user
+    ? (await supabase.from("trips").select("id,title").order("created_at", { ascending: false }).limit(30)).data
+    : [];
   const itemIds = (templates ?? []).flatMap((template) => (template.community_template_items ?? []).map((row) => row.id));
   const { data: priceRows } = itemIds.length
     ? await supabase
@@ -37,13 +38,15 @@ export default async function ExplorePage({
   for (const row of priceRows ?? []) {
     if (!latestPriceByItemId.has(row.item_id)) latestPriceByItemId.set(row.item_id, row);
   }
-  const autoZh = lang === "en" && (templates ?? []).some((template) => {
-    if (hasCjk(template.title) || hasCjk(template.description) || hasCjk(template.note)) return true;
+  const shouldAutoDetectLang = !rawLang;
+  const autoZh = shouldAutoDetectLang && lang === "en" && (templates ?? []).some((template) => {
+    if (hasCjkText(template.title) || hasCjkText(template.description) || hasCjkText(template.note)) return true;
     const rows = template.community_template_items ?? [];
-    return rows.some((row) => hasCjk(row.name_zh) || hasCjk(row.note_zh) || hasCjk(row.name) || hasCjk(row.note));
+    return rows.some((row) => hasCjkText(row.name_zh) || hasCjkText(row.note_zh) || hasCjkText(row.name) || hasCjkText(row.note));
   });
   const uiLang: Lang = autoZh ? "zh-CN" : lang;
   const t = texts[uiLang];
+  const contributionCount = templates?.length ?? 0;
 
   return (
     <main className="packlog-page mx-auto w-full max-w-[660px] p-4 md:p-6">
@@ -57,7 +60,11 @@ export default async function ExplorePage({
         {uiLang === "en" ? "Checklist Community" : uiLang === "zh-TW" ? "清單廣場" : "清单广场"}
       </h1>
       <p className="mb-4 mt-1 text-xs tracking-[0.08em] text-[#8d887d]">
-        {uiLang === "en" ? "1280 CONTRIBUTIONS · UPDATED DAILY" : uiLang === "zh-TW" ? "1280 份投稿 · 每日更新" : "1280 份投稿 · 每日更新"}
+        {uiLang === "en"
+          ? `${contributionCount} CONTRIBUTIONS · UPDATED DAILY`
+          : uiLang === "zh-TW"
+            ? `${contributionCount} 份投稿 · 每日更新`
+            : `${contributionCount} 份投稿 · 每日更新`}
       </p>
       <CommunityExploreClient
         templates={(templates ?? []).map((template) => ({
@@ -83,6 +90,8 @@ export default async function ExplorePage({
             .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
         }))}
         trips={tripOptions ?? []}
+        sceneTemplates={sceneTemplates ?? []}
+        canMutate={Boolean(userData?.user)}
         lang={uiLang}
         initialPreview={preview}
       />

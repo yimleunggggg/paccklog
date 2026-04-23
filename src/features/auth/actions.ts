@@ -67,6 +67,27 @@ export async function signInWithPassword(formData: FormData) {
   redirect("/");
 }
 
+export async function signUpWithPassword(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  if (!email || !password) {
+    redirect("/login?error=missing_signup_fields");
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
+
+  if (error) {
+    redirect(`/login?error=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect("/login?sent=1&email=" + encodeURIComponent(email));
+}
+
 export async function signOut() {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();

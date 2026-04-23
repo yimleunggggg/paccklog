@@ -95,7 +95,7 @@ export function QuickAddForm({
                     key={item.value}
                     type="button"
                     className={`ui-dropdown-option block w-full text-left ${category === item.value ? "ui-dropdown-option-active" : ""}`}
-                    onMouseDown={() => {
+                    onClick={() => {
                       setCategory(item.value);
                       setCategoryOpen(false);
                     }}

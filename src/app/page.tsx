@@ -1,10 +1,20 @@
 import Link from "next/link";
 import { Archive, ArchiveRestore, Pin, PinOff, Trash2 } from "lucide-react";
 import { deleteTrip, toggleTripArchived, toggleTripPinned } from "@/features/trips/actions";
-import { requireUser } from "@/features/trips/server";
-import { HeaderIconMenus } from "@/components/header-icon-menus";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { TripActionSubmitButton } from "@/components/trip-action-submit-button";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveLang, texts } from "@/shared/i18n";
+import { localeForLang, pickLangText } from "@/shared/localized-text";
+
+function formatDateRange(start: string | null, end: string | null, lang: string) {
+  if (!start) return "--";
+  const locale = localeForLang(lang);
+  const fmt = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" });
+  const startStr = fmt.format(new Date(start));
+  const endStr = end ? fmt.format(new Date(end)) : "--";
+  return `${startStr} – ${endStr}`;
+}
 
 export default async function Home({
   searchParams,
@@ -14,10 +24,41 @@ export default async function Home({
   const { lang: rawLang, status } = await searchParams;
   const lang = resolveLang(rawLang);
   const t = texts[lang];
-  const { supabase, user } = await requireUser();
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData.user;
+  if (!user) {
+    return (
+      <main className="packlog-page mx-auto w-full max-w-[980px] p-4 md:p-6">
+        <header className="mb-6 space-y-3">
+          <h1
+            className="text-3xl leading-[1.05] text-[#1c1c18]"
+            style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}
+          >
+            {t.appName}
+          </h1>
+          <p className="text-sm text-[#6f6b62]">
+            {lang === "en"
+              ? "Browse community checklists first. Login starts only when you create your personal trip."
+              : lang === "zh-TW"
+                ? "可先瀏覽社群清單；只有在建立個人行程時才會啟動登入。"
+                : "你可以先浏览社区清单；只有在创建个人行程时才会发起登录。"}
+          </p>
+        </header>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/explore?lang=${lang}`} className="brand-btn-soft px-4 py-2 text-sm">
+            {t.explore}
+          </Link>
+          <Link href={`/trips/new?lang=${lang}`} className="brand-btn-primary px-4 py-2 text-sm">
+            {t.newTrip}
+          </Link>
+        </div>
+      </main>
+    );
+  }
   const { data: trips, error } = await supabase
     .from("trips")
-    .select("id,title,start_date,end_date,status,created_at,tags,trip_items(status),trip_scenes(scene_templates(name_zh,icon))")
+    .select("id,title,start_date,end_date,status,created_at,tags,trip_items(status),trip_scenes(scene_templates(name_zh,name_en,icon))")
     .order("created_at", { ascending: false });
   const normalizedTrips = (trips ?? [])
     .map((trip) => ({
@@ -34,18 +75,13 @@ export default async function Home({
     }))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned));
   const selectedStatus = status === "in_progress" || status === "done" ? status : "all";
-  const sceneLabelMap: Record<string, string> = {
-    徒步: lang === "en" ? "Hiking" : lang === "zh-TW" ? "健行" : "徒步",
-    露营: lang === "en" ? "Camping" : lang === "zh-TW" ? "露營" : "露营",
-    越野跑: lang === "en" ? "Trail Run" : lang === "zh-TW" ? "越野跑" : "越野跑",
-    潜水: lang === "en" ? "Diving" : lang === "zh-TW" ? "潛水" : "潜水",
-    音乐节: lang === "en" ? "Music Festival" : lang === "zh-TW" ? "音樂祭" : "音乐节",
-    城市漫游: lang === "en" ? "City Walk" : lang === "zh-TW" ? "城市漫遊" : "城市漫游",
-    攀岩: lang === "en" ? "Climbing" : lang === "zh-TW" ? "攀岩" : "攀岩",
-    骑行: lang === "en" ? "Cycling" : lang === "zh-TW" ? "騎行" : "骑行",
-    滑雪: lang === "en" ? "Skiing" : lang === "zh-TW" ? "滑雪" : "滑雪",
-    出国基础: lang === "en" ? "International Basics" : lang === "zh-TW" ? "出國基礎" : "出国基础",
-  };
+  const inProgressCount = normalizedTrips.filter(
+    (trip) => trip.status === "planning" || trip.status === "in_progress" || trip.status === "packing" || trip.status === "traveling",
+  ).length;
+  const archivedCount = normalizedTrips.filter((trip) => trip.status === "done" || trip.status === "completed").length;
+  const sceneLabel = (scene: { name_zh?: string | null; name_en?: string | null }) =>
+    lang === "en" ? scene.name_en?.trim() || scene.name_zh || "" : scene.name_zh || scene.name_en || "";
+  const l = (en: string, zhTW: string, zhCN: string) => pickLangText(lang, { en, zhTW, zhCN });
   const statusLabel = (value?: string | null) => {
     if (!value) return "";
     if (value === "planning" || value === "in_progress" || value === "packing" || value === "traveling") return t.packingNow;
@@ -93,25 +129,6 @@ export default async function Home({
     if (selectedStatus === "done") return trip.status === "done" || trip.status === "completed";
     return true;
   });
-  const hasFilter = selectedStatus !== "all";
-  const filterHint =
-    visibleTrips.length === 0
-      ? lang === "en"
-        ? "No matching trips. Try another filter."
-        : lang === "zh-TW"
-          ? "未找到符合條件的行程，請調整篩選。"
-          : "未找到符合条件的行程，请调整筛选。"
-      : hasFilter
-        ? lang === "en"
-          ? `Filtered trips: ${visibleTrips.length} / ${normalizedTrips.length}`
-          : lang === "zh-TW"
-            ? `篩選結果：${visibleTrips.length} / ${normalizedTrips.length}`
-            : `筛选结果：${visibleTrips.length} / ${normalizedTrips.length}`
-        : lang === "en"
-          ? `Showing all trips: ${normalizedTrips.length}`
-          : lang === "zh-TW"
-            ? `顯示全部 ${normalizedTrips.length} 個行程`
-            : `显示全部 ${normalizedTrips.length} 个行程`;
 
   return (
     <main className="packlog-page mx-auto w-full max-w-[980px] p-4 md:p-6">
@@ -125,19 +142,7 @@ export default async function Home({
             {t.appName}
           </h1>
           <p className="text-sm text-[#8c8880]">{user.email}</p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Link href={`/explore?lang=${lang}`} className="brand-btn-soft inline-flex h-10 items-center px-4 text-[12px]">
-              {t.navExplore}
-            </Link>
-            <Link href={`/locker?lang=${lang}`} className="brand-btn-soft inline-flex h-10 items-center px-4 text-[12px]">
-              {t.gearLocker}
-            </Link>
-            <Link href={`/trips/new?lang=${lang}`} className="brand-btn-primary inline-flex h-10 items-center px-4 text-[12px]">
-              {t.newTrip}
-            </Link>
           </div>
-          </div>
-          <HeaderIconMenus lang={lang} />
         </div>
       </header>
 
@@ -150,20 +155,24 @@ export default async function Home({
       <section className="mb-2" />
       <div className="mb-4 flex flex-wrap gap-2">
         {[
-          { value: "all", label: t.tabAll },
-          { value: "in_progress", label: t.tabInProgress },
-          { value: "done", label: t.tabArchived },
+          { value: "all", label: `${t.tabAll} (${normalizedTrips.length})` },
+          { value: "in_progress", label: `${t.tabInProgress} (${inProgressCount})` },
+          { value: "done", label: `${t.tabArchived} (${archivedCount})` },
         ].map((tab) => (
           <Link
             key={tab.value}
             href={`/?lang=${lang}&status=${tab.value}`}
             className={`brand-chip inline-flex min-w-[72px] ${selectedStatus === tab.value ? "brand-chip-active" : ""}`}
           >
-            {(tab.label ?? "").trim() || (tab.value === "all" ? (lang === "en" ? "All" : lang === "zh-TW" ? "全部" : "全部") : tab.value === "in_progress" ? (lang === "en" ? "In progress" : lang === "zh-TW" ? "進行中" : "进行中") : lang === "en" ? "Archived" : lang === "zh-TW" ? "歸檔" : "归档")}
+            {(tab.label ?? "").trim() ||
+              (tab.value === "all"
+                ? l("All", "全部", "全部")
+                : tab.value === "in_progress"
+                  ? l("In progress", "進行中", "进行中")
+                  : l("Archived", "歸檔", "归档"))}
           </Link>
         ))}
       </div>
-      <p className={`ui-filter-hint mb-3 ${visibleTrips.length === 0 ? "ui-filter-hint-empty" : ""}`}>{filterHint}</p>
       {!normalizedTrips || normalizedTrips.length === 0 ? (
         <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
           {t.emptyTrips}
@@ -183,9 +192,9 @@ export default async function Home({
                   </p>
                   <p className="trip-ledger-meta">
                     {trip.pinned ? <span className="trip-pinned-dot" aria-label={t.pin} /> : null}
-                    <span>{(trip.start_date ?? t.noDate)} - {(trip.end_date ?? t.noDate)}</span>
+                    <span>{formatDateRange(trip.start_date, trip.end_date, lang)}</span>
                     <span className="trip-ledger-dot" />
-                    <span>{(trip.sceneTags ?? []).map((s) => sceneLabelMap[s.name_zh] ?? s.name_zh).join(" · ") || "-"}</span>
+                    <span>{(trip.sceneTags ?? []).map((s) => sceneLabel(s)).join(" · ") || "-"}</span>
                     <span className="trip-ledger-dot" />
                     <span>{trip.itemCount} {t.itemsCount}</span>
                   </p>
@@ -194,16 +203,16 @@ export default async function Home({
                   <form action={toggleTripArchived}>
                     <input type="hidden" name="trip_id" value={trip.id} />
                     <input type="hidden" name="current_status" value={trip.status} />
-                    <button className="trip-action-btn" type="submit" aria-label={isArchived ? t.unarchive : t.archive}>
+                    <TripActionSubmitButton className="trip-action-btn" ariaLabel={isArchived ? t.unarchive : t.archive}>
                       {isArchived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
-                    </button>
+                    </TripActionSubmitButton>
                   </form>
                   <form action={toggleTripPinned}>
                     <input type="hidden" name="trip_id" value={trip.id} />
                     <input type="hidden" name="next_pinned" value={trip.pinned ? "false" : "true"} />
-                    <button className="trip-action-btn" type="submit" aria-label={trip.pinned ? t.unpin : t.pin}>
+                    <TripActionSubmitButton className="trip-action-btn" ariaLabel={trip.pinned ? t.unpin : t.pin}>
                       {trip.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-                    </button>
+                    </TripActionSubmitButton>
                   </form>
                   <form action={deleteTrip}>
                     <input type="hidden" name="trip_id" value={trip.id} />
@@ -220,7 +229,7 @@ export default async function Home({
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-2">
-                <div className="trip-progress-track flex-1" aria-label={statusLabel(trip.status)}>
+                <div className={`trip-progress-track flex-1 ${trip.itemCount === 0 ? "is-empty" : ""}`} aria-label={statusLabel(trip.status)}>
                   <div className="trip-progress-fill" style={{ width: `${trip.itemCount ? Math.round((trip.packedCount / trip.itemCount) * 100) : 0}%` }} />
                 </div>
                 <p className="trip-progress-percent">

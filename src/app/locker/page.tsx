@@ -1,13 +1,10 @@
 import Link from "next/link";
-import { requireUser } from "@/features/trips/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveLang, texts, type Lang } from "@/shared/i18n";
 import { LockerAddModal } from "@/components/locker-add-modal";
 import { LockerFilteredList } from "@/components/locker-filtered-list";
 import { getItemCategoryOptions } from "@/shared/item-categories";
-
-function hasCjk(text: string | null | undefined) {
-  return /[\u4e00-\u9fff]/.test(text ?? "");
-}
+import { hasCjkText } from "@/shared/localized-text";
 
 export default async function LockerPage({
   searchParams,
@@ -16,7 +13,36 @@ export default async function LockerPage({
 }) {
   const { lang: rawLang, status, category, brand } = await searchParams;
   const lang = resolveLang(rawLang);
-  const { supabase, user } = await requireUser();
+  const supabase = await createSupabaseServerClient();
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData.user;
+  if (!user) {
+    const t = texts[lang];
+    return (
+      <main className="packlog-page mx-auto w-full max-w-[980px] p-4 md:p-6">
+        <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-[26px] italic text-[#1c1c18]" style={{ fontFamily: "EB Garamond, serif" }}>
+            {t.gearLocker}
+          </h1>
+          <Link href={`/explore?lang=${lang}`} className="brand-btn-soft px-3 py-2 text-[12px]">
+            {t.explore}
+          </Link>
+        </header>
+        <div className="rounded-xl border border-dashed border-[#d8d0c4] p-6 text-sm text-[#6f6b62]">
+          {lang === "en"
+            ? "Gear locker is personal space. Login starts only when you create your trip."
+            : lang === "zh-TW"
+              ? "裝備倉是個人空間。只有在建立個人行程時才會啟動登入。"
+              : "装备仓是个人空间。只有在创建个人行程时才会发起登录。"}
+          <div className="mt-3">
+            <Link href={`/trips/new?lang=${lang}`} className="brand-btn-primary px-4 py-2 text-sm">
+              {t.newTrip}
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
   const selectedStatus = status === "owned" || status === "wishlist" ? status : "all";
   const selectedCategory = String(category ?? "all");
   const brandKeyword = String(brand ?? "").trim();
@@ -25,7 +51,11 @@ export default async function LockerPage({
     .select("id,name,category,brand,note,status,times_used,created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
-  const autoZh = lang === "en" && (lockerItems ?? []).some((item) => hasCjk(item.name) || hasCjk(item.note) || hasCjk(item.brand));
+  const shouldAutoDetectLang = !rawLang;
+  const autoZh =
+    shouldAutoDetectLang &&
+    lang === "en" &&
+    (lockerItems ?? []).some((item) => hasCjkText(item.name) || hasCjkText(item.note) || hasCjkText(item.brand));
   const uiLang: Lang = autoZh ? "zh-CN" : lang;
   const t = texts[uiLang];
   const noteText = uiLang === "en" ? "Note" : uiLang === "zh-TW" ? "備註" : "备注";

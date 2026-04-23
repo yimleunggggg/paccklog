@@ -1,3 +1,5 @@
+import { pickLangText } from "@/shared/localized-text";
+
 type WeatherSummary = {
   locationLabel: string;
   avgTempC: number | null;
@@ -11,18 +13,17 @@ type WeatherSummary = {
 };
 
 function buildSuggestion(avgTemp: number | null, rain: number | null, wind: number | null, lang: string) {
+  const l = (en: string, zhTW: string, zhCN: string) => pickLangText(lang, { en, zhTW, zhCN });
   const tips: string[] = [];
-  const isEn = lang === "en";
-  const isTw = lang === "zh-TW";
   if (avgTemp !== null) {
-    if (avgTemp <= 8) tips.push(isEn ? "Layer up with insulation and a windproof shell; pack warm socks and gloves." : isTw ? "建議保暖中層+防風外層，準備保暖襪與手套。" : "建议保暖中层+防风外层，准备保暖袜和手套。");
-    else if (avgTemp <= 18) tips.push(isEn ? "Use layering: long-sleeve base + light jacket." : isTw ? "建議洋蔥式穿搭，長袖內層+輕外套。" : "建议洋葱穿搭，长袖内层+轻外套。");
-    else if (avgTemp <= 28) tips.push(isEn ? "Choose breathable quick-dry outfits and keep sun protection ready." : isTw ? "建議透氣快乾衣物，白天注意防曬。" : "建议透气速干衣物，白天注意防晒。");
-    else tips.push(isEn ? "Keep outfits very light and breathable; hydrate and strengthen sun protection." : isTw ? "建議輕薄透氣穿搭，補水與防曬都要加強。" : "建议轻薄透气穿搭，补水和防晒都要加强。");
+    if (avgTemp <= 8) tips.push(l("Layer up with insulation and a windproof shell; pack warm socks and gloves.", "建議保暖中層+防風外層，準備保暖襪與手套。", "建议保暖中层+防风外层，准备保暖袜和手套。"));
+    else if (avgTemp <= 18) tips.push(l("Use layering: long-sleeve base + light jacket.", "建議洋蔥式穿搭，長袖內層+輕外套。", "建议洋葱穿搭，长袖内层+轻外套。"));
+    else if (avgTemp <= 28) tips.push(l("Choose breathable quick-dry outfits and keep sun protection ready.", "建議透氣快乾衣物，白天注意防曬。", "建议透气速干衣物，白天注意防晒。"));
+    else tips.push(l("Keep outfits very light and breathable; hydrate and strengthen sun protection.", "建議輕薄透氣穿搭，補水與防曬都要加強。", "建议轻薄透气穿搭，补水和防晒都要加强。"));
   }
-  if (rain !== null && rain >= 8) tips.push(isEn ? "Rain looks significant: bring a rain shell and waterproof pouches." : isTw ? "預計降水偏多，建議帶雨衣/防水殼與防水收納袋。" : "预计降水偏多，建议带雨衣/防水壳和防水收纳袋。");
-  if (wind !== null && wind >= 30) tips.push(isEn ? "Wind may be strong: add a windproof jacket and cap." : isTw ? "預計風力較強，建議帶防風外套與防風帽。" : "预计风力较强，建议带防风外套和防风帽。");
-  if (tips.length === 0) tips.push(isEn ? "Pack a standard lightweight setup and check weather updates before departure." : isTw ? "建議按常規輕量化裝備準備，並關注臨近天氣更新。" : "建议按常规轻量化出行装备准备，并关注临近天气更新。");
+  if (rain !== null && rain >= 8) tips.push(l("Rain looks significant: bring a rain shell and waterproof pouches.", "預計降水偏多，建議帶雨衣/防水殼與防水收納袋。", "预计降水偏多，建议带雨衣/防水壳和防水收纳袋。"));
+  if (wind !== null && wind >= 30) tips.push(l("Wind may be strong: add a windproof jacket and cap.", "預計風力較強，建議帶防風外套與防風帽。", "预计风力较强，建议带防风外套和防风帽。"));
+  if (tips.length === 0) tips.push(l("Pack a standard lightweight setup and check weather updates before departure.", "建議按常規輕量化裝備準備，並關注臨近天氣更新。", "建议按常规轻量化出行装备准备，并关注临近天气更新。"));
   return tips.join(" ");
 }
 
@@ -45,7 +46,7 @@ function buildEstimatedWeather(city: string, country: string | undefined, startD
     rainSumMm: range.rain,
     windMaxKmh: range.wind,
     suggestion: buildSuggestion(avg, range.rain, range.wind, lang),
-    source: lang === "en" ? "Open-Meteo (estimated)" : lang === "zh-TW" ? "Open-Meteo（估算）" : "Open-Meteo（估算）",
+    source: pickLangText(lang, { en: "Open-Meteo (estimated)", zhTW: "Open-Meteo（估算）", zhCN: "Open-Meteo（估算）" }),
     isEstimated: true,
   } satisfies WeatherSummary;
 }
@@ -54,7 +55,7 @@ export async function getTripWeather(city?: string, country?: string, startDate?
   if (!city || !startDate || !endDate) return null;
 
   const locationQuery = encodeURIComponent([city, country].filter(Boolean).join(", "));
-  const geoLang = lang === "en" ? "en" : "zh";
+  const geoLang = pickLangText(lang, { en: "en", zhTW: "zh", zhCN: "zh" });
   const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${locationQuery}&count=1&language=${geoLang}&format=json`;
   const geoResp = await fetch(geoUrl, { cache: "no-store" });
   if (!geoResp.ok) return buildEstimatedWeather(city, country, startDate, lang);

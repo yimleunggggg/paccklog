@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Building2, ChevronDown, ChevronLeft, ChevronRight, Compass, Music2, Plane, TentTree, Waves, Zap } from "lucide-react";
+import { Building2, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Compass, Music2, Plane, TentTree, Waves, Zap } from "lucide-react";
 import { createTripWithTemplates } from "@/features/trips/actions";
 import { type Lang, texts } from "@/shared/i18n";
+import { localeForLang, pickLangText } from "@/shared/localized-text";
 
 type Template = {
   id: string;
@@ -255,6 +256,7 @@ function normalizeSearch(value: string) {
 
 export function NewTripForm({ templates, lang, error }: { templates: Template[]; lang: Lang; error?: string }) {
   const t = texts[lang];
+  const l = (en: string, zhTW: string, zhCN: string) => pickLangText(lang, { en, zhTW, zhCN });
   const continents = Object.keys(destinationTree);
   const [continent, setContinent] = useState<string>(continents[0]);
   const countries = Object.keys(destinationTree[continent as keyof typeof destinationTree]);
@@ -282,36 +284,34 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
 
   const displayName = (value: string) => localizedNames[lang][value] ?? value;
 
+  const iconForScene = (name: string) => {
+    if (name.includes("徒步")) return Compass;
+    if (name.includes("露营")) return TentTree;
+    if (name.includes("越野")) return Zap;
+    if (name.includes("潜水")) return Waves;
+    if (name.includes("音乐")) return Music2;
+    if (name.includes("城市")) return Building2;
+    if (name.includes("出国") || name.includes("跨国") || name.includes("旅行")) return Plane;
+    return CircleDot;
+  };
   const sceneGroups = useMemo(() => {
-    const labels =
+    const labelMap: Record<string, string> =
       lang === "en"
-        ? { outdoor: "Outdoor", city: "City", travelBasics: "Travel Basics" }
+        ? { outdoor: "Outdoor", city: "City", travel_basics: "Travel Basics", travel: "Travel", other: "Other" }
         : lang === "zh-TW"
-          ? { outdoor: "戶外活動", city: "城市活動", travelBasics: "出行基礎" }
-          : { outdoor: "户外活动", city: "城市活动", travelBasics: "出行基础" };
-    return [
-      {
-        group: labels.outdoor,
-        items: [
-          { key: "徒步", Icon: Compass },
-          { key: "露营", Icon: TentTree },
-          { key: "越野跑", Icon: Zap },
-          { key: "潜水", Icon: Waves },
-        ],
-      },
-      {
-        group: labels.city,
-        items: [
-          { key: "音乐节", Icon: Music2 },
-          { key: "城市漫游", Icon: Building2 },
-        ],
-      },
-      {
-        group: labels.travelBasics,
-        items: [{ key: "跨国旅行", Icon: Plane }],
-      },
-    ] as const;
-  }, [lang]);
+          ? { outdoor: "戶外活動", city: "城市活動", travel_basics: "出行基礎", travel: "旅行", other: "其他" }
+          : { outdoor: "户外活动", city: "城市活动", travel_basics: "出行基础", travel: "旅行", other: "其他" };
+    const grouped = new Map<string, Array<{ key: string; Icon: ReturnType<typeof iconForScene> }>>();
+    for (const tpl of templates) {
+      const categoryKey = String(tpl.category ?? "other").toLowerCase();
+      if (!grouped.has(categoryKey)) grouped.set(categoryKey, []);
+      grouped.get(categoryKey)?.push({ key: tpl.name_zh, Icon: iconForScene(tpl.name_zh) });
+    }
+    return Array.from(grouped.entries()).map(([group, items]) => ({
+      group: labelMap[group] ?? group,
+      items,
+    }));
+  }, [lang, templates]);
   const templateByName = useMemo(() => {
     const map = new Map<string, Template>();
     templates.forEach((item) => map.set(item.name_zh, item));
@@ -382,9 +382,10 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
     if (!s || !e || e < s) return t.invalidDateHint;
     const days = Math.floor((e.getTime() - s.getTime()) / 86400000) + 1;
     const mainCity = selectedCities[0] || country || continent;
-    const mainScene = selectedScenes.length ? selectedScenes.slice(0, 2).join("") : (lang === "en" ? "Trip" : "行程");
-    return `${mainCity} · ${mainScene} · ${days}${lang === "en" ? "d" : "日"}`;
-  }, [startDate, endDate, country, selectedCities, continent, selectedScenes, lang, t.invalidDateHint]);
+    const mainScene =
+      selectedScenes.length ? selectedScenes.slice(0, 2).join("") : pickLangText(lang, { en: "Trip", zhTW: "行程", zhCN: "行程" });
+    return `${mainCity} · ${mainScene} · ${days}${pickLangText(lang, { en: "d", zhTW: "日", zhCN: "日" })}`;
+  }, [startDate, endDate, country, selectedCities, continent, selectedScenes, t.invalidDateHint, lang]);
   const previewTitle = customTitle.trim() || generatedTitle;
   const travelPresets: Array<{ value: string; label: string }> = useMemo(
     () =>
@@ -422,7 +423,7 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
     () =>
       Array.from({ length: 12 }, (_, i) => ({
         value: i,
-        label: new Date(2026, i, 1).toLocaleString(lang === "en" ? "en-US" : lang === "zh-TW" ? "zh-TW" : "zh-CN", { month: "long" }),
+        label: new Date(2026, i, 1).toLocaleString(localeForLang(lang), { month: "long" }),
       })),
     [lang],
   );
@@ -557,7 +558,7 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
                     ))}
                     {countryQuery.trim() && filteredCountries.length === 0 ? (
                       <p className="px-2 py-2 text-xs text-[#8c8880]">
-                        {lang === "en" ? "No country match. Try Chinese, pinyin, or English keywords." : lang === "zh-TW" ? "未找到匹配國家，請嘗試中文、拼音或英文關鍵字。" : "未找到匹配国家，请尝试中文、拼音或英文关键词。"}
+                        {l("No country match. Try Chinese, pinyin, or English keywords.", "未找到匹配國家，請嘗試中文、拼音或英文關鍵字。", "未找到匹配国家，请尝试中文、拼音或英文关键词。")}
                       </p>
                     ) : null}
                   </div>
@@ -566,7 +567,7 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
             </label>
             <label className="text-sm">
               <p className="mb-1 text-[12px] tracking-[0.06em] text-[#8c8880]">
-                {lang === "en" ? "STATE / PROVINCE" : lang === "zh-TW" ? "省 / 州" : "省 / 州"}
+                {l("STATE / PROVINCE", "省 / 州", "省 / 州")}
               </p>
               <select
                 value={region}
@@ -586,16 +587,8 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
               >
                 <option value="">
                   {regionOptions.length
-                    ? lang === "en"
-                      ? "All regions"
-                      : lang === "zh-TW"
-                        ? "全部省州"
-                        : "全部省州"
-                    : lang === "en"
-                      ? "Not required"
-                      : lang === "zh-TW"
-                        ? "該國家不需要"
-                        : "该国家不需要"}
+                    ? l("All regions", "全部省州", "全部省州")
+                    : l("Not required", "該國家不需要", "该国家不需要")}
                 </option>
                 {regionOptions.map((item) => (
                   <option key={item} value={item}>
@@ -723,14 +716,14 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
                     setQuickDuration(null);
                   }
                 }}
-                placeholder={lang === "en" ? "Days" : "天数"}
+                placeholder={l("Days", "天数", "天数")}
                 className="h-10 w-[92px] rounded-[10px] border-[0.5px] border-[#d8d0c4] bg-[#fefcf8] px-3 text-sm"
               />
             ) : null}
           </div>
           {selectedDurationDays ? (
             <p className="mt-2 text-[12px] text-[#6f6b62]">
-              {lang === "en" ? `Selected duration: ${selectedDurationDays} day(s)` : lang === "zh-TW" ? `已選時長：${selectedDurationDays} 天` : `已选时长：${selectedDurationDays} 天`}
+              {l(`Selected duration: ${selectedDurationDays} day(s)`, `已選時長：${selectedDurationDays} 天`, `已选时长：${selectedDurationDays} 天`)}
             </p>
           ) : null}
         </div>
@@ -928,8 +921,8 @@ export function NewTripForm({ templates, lang, error }: { templates: Template[];
           ))}
         </div>
         <div className="mt-3 rounded-[10px] bg-[#243d1f] px-3 py-2 text-xs text-[#dbe7d6]">
-          {(lang === "en" ? "Selected scenes: " : lang === "zh-TW" ? "已選場景：" : "已选场景：") +
-            (selectedScenes.length ? selectedScenes.join(" · ") : lang === "en" ? "None" : lang === "zh-TW" ? "暫無" : "暂无")}
+          {l("Selected scenes: ", "已選場景：", "已选场景：") +
+            (selectedScenes.length ? selectedScenes.join(" · ") : l("None", "暫無", "暂无"))}
         </div>
       </div>
       <div className="flex items-center justify-between gap-2">
