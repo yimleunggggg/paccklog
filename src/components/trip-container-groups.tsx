@@ -16,6 +16,9 @@ type TripItem = {
   brand_alternatives: string[] | null;
   note: string | null;
   review_result: string | null;
+  review_note?: string | null;
+  review_utility?: number | null;
+  weight_g?: number | null;
 };
 
 type TripContainerGroupsProps = {

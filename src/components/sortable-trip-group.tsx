@@ -19,6 +19,9 @@ type TripItem = {
   brand_alternatives: string[] | null;
   note: string | null;
   review_result: string | null;
+  review_note?: string | null;
+  review_utility?: number | null;
+  weight_g?: number | null;
 };
 
 type SortableTripGroupProps = {
@@ -146,14 +149,28 @@ export function SortableTripGroup({
     else softRefresh();
   }
 
-  async function handleReviewPick(row: TripItem, reviewValue: string) {
+  async function handleReviewPick(row: TripItem, payload: { reviewResult?: string; reviewUtility?: number | null; reviewNote?: string }) {
+    const nextReviewResult = payload.reviewResult ?? row.review_result ?? "skip";
+    const nextReviewUtility = payload.reviewUtility ?? row.review_utility ?? null;
+    const nextReviewNote = payload.reviewNote ?? row.review_note ?? "";
     setOrderedItems((prev) =>
-      prev.map((entry) => (entry.id === row.id ? { ...entry, review_result: reviewValue } : entry)),
+      prev.map((entry) =>
+        entry.id === row.id
+          ? {
+              ...entry,
+              review_result: nextReviewResult,
+              review_utility: nextReviewUtility,
+              review_note: nextReviewNote || null,
+            }
+          : entry,
+      ),
     );
     const fd = new FormData();
     fd.set("id", row.id);
     fd.set("trip_id", tripId);
-    fd.set("review_result", reviewValue);
+    fd.set("review_result", nextReviewResult);
+    if (nextReviewUtility) fd.set("review_utility", String(nextReviewUtility));
+    if (nextReviewNote) fd.set("review_note", nextReviewNote);
     await setTripItemReview(fd);
     softRefresh();
   }
@@ -351,6 +368,12 @@ export function SortableTripGroup({
                     {l("Location: ", "位置：", "位置：")}
                     {containerMeta[item.container] ?? item.container}
                   </span>
+                  {typeof item.weight_g === "number" ? (
+                    <span className="status-tag status-tag-container">
+                      {l("Weight: ", "重量：", "重量：")}
+                      {item.weight_g}g
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => handleTogglePacked(item)}
@@ -361,17 +384,50 @@ export function SortableTripGroup({
                   </button>
                 </div>
                 {canReview ? (
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {reviewLabels.map((r) => (
-                      <button
-                        key={r.value}
-                        type="button"
-                        onClick={() => handleReviewPick(item, r.value)}
-                        className={`status-tag status-tag-container ${itemsById.get(item.id)?.review_result === r.value ? "ring-1 ring-[#6b9460]" : ""}`}
-                      >
-                        {r.label}
-                      </button>
-                    ))}
+                  <div className="space-y-2 pt-1">
+                    <div className="flex flex-wrap gap-2">
+                      {reviewLabels.map((r) => (
+                        <button
+                          key={r.value}
+                          type="button"
+                          onClick={() => handleReviewPick(item, { reviewResult: r.value })}
+                          className={`status-tag status-tag-container ${itemsById.get(item.id)?.review_result === r.value ? "ring-1 ring-[#6b9460]" : ""}`}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((score) => {
+                        const active = (itemsById.get(item.id)?.review_utility ?? 0) >= score;
+                        return (
+                          <button
+                            key={score}
+                            type="button"
+                            aria-label={l(`Utility ${score}`, `實用度 ${score}`, `实用度 ${score}`)}
+                            className={`text-[13px] ${active ? "text-[#9b6a2a]" : "text-[#b9b2a7]"}`}
+                            onClick={() =>
+                              handleReviewPick(item, {
+                                reviewUtility: itemsById.get(item.id)?.review_utility === score ? null : score,
+                              })
+                            }
+                          >
+                            ★
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <input
+                      type="text"
+                      defaultValue={itemsById.get(item.id)?.review_note ?? ""}
+                      placeholder={l("Review note...", "復盤備註...", "复盘备注...")}
+                      className="ui-control-input h-8 w-full rounded-[8px] text-[12px]"
+                      onBlur={(event) => {
+                        const value = event.target.value.trim();
+                        if (value === (itemsById.get(item.id)?.review_note ?? "")) return;
+                        void handleReviewPick(item, { reviewNote: value });
+                      }}
+                    />
                   </div>
                 ) : null}
               </div>

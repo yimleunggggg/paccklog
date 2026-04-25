@@ -21,6 +21,15 @@ type LockerItem = {
     note: string | null;
     updated_at: string | null;
   }>;
+  review_logs?: Array<{
+    trip_id: string;
+    trip_title: string;
+    trip_date: string;
+    review_result: string | null;
+    review_utility: number | null;
+    review_note: string | null;
+    occurred_at: string | null;
+  }>;
 };
 
 type CategoryOption = {
@@ -64,8 +73,10 @@ export function LockerFilteredList({
   const [category, setCategory] = useState(initialCategory);
   const [keywordInput, setKeywordInput] = useState(initialBrand);
   const [appliedKeyword, setAppliedKeyword] = useState(initialBrand);
+  const [sortBy, setSortBy] = useState<"recent_review" | "avg_utility" | "used_times" | "name">("recent_review");
   const noteText = l("Note", "備註", "备注");
   const historyText = l("Usage log", "使用記錄", "使用记录");
+  const reviewHistoryText = l("Review history", "復盤記錄", "复盘记录");
   const optionalText = l("optional", "可選", "可选");
   const statusLabel = (value: string) => {
     if (value === "packed") return l("Packed", "已打包", "已打包");
@@ -79,6 +90,13 @@ export function LockerFilteredList({
     if (value === "carry_on") return l("Carry-on", "隨身包", "随身包");
     if (value === "wear") return l("On body", "身上穿戴", "身上穿戴");
     return l("Unsorted", "未分類", "未分类");
+  };
+  const reviewResultLabel = (value: string | null | undefined) => {
+    if (value === "used") return l("Used", "已用到", "已用到");
+    if (value === "unused") return l("Unused", "帶了沒用", "带了没用");
+    if (value === "missed") return l("Missed", "沒帶後悔", "没带后悔");
+    if (value === "skip") return l("N/A", "不適用", "不适用");
+    return l("Unknown", "未分類", "未分类");
   };
   const getLocalizedLockerName = (item: LockerItem) =>
     resolveLocalizedText({
@@ -95,13 +113,31 @@ export function LockerFilteredList({
     });
 
   const visibleItems = useMemo(() => {
-    return items.filter((item) => {
+    const filtered = items.filter((item) => {
       const statusOk = status === "all" ? true : item.status === status;
       const categoryOk = category === "all" ? true : (item.category ?? "other") === category;
       const brandOk = !appliedKeyword ? true : (item.brand ?? "").toLowerCase().includes(appliedKeyword.toLowerCase());
       return statusOk && categoryOk && brandOk;
     });
-  }, [items, status, category, appliedKeyword]);
+    const scoreAvgUtility = (item: LockerItem) => {
+      const values = (item.review_logs ?? [])
+        .map((log) => Number(log.review_utility))
+        .filter((v) => Number.isFinite(v) && v > 0);
+      if (!values.length) return -1;
+      return values.reduce((sum, v) => sum + v, 0) / values.length;
+    };
+    const scoreRecentReview = (item: LockerItem) => {
+      const latest = (item.review_logs ?? [])[0]?.occurred_at;
+      return latest ? new Date(latest).getTime() : 0;
+    };
+    const scoreUsedTimes = (item: LockerItem) => Math.max(item.times_used ?? 0, item.usage_logs?.length ?? 0);
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "avg_utility") return scoreAvgUtility(b) - scoreAvgUtility(a);
+      if (sortBy === "used_times") return scoreUsedTimes(b) - scoreUsedTimes(a);
+      if (sortBy === "name") return String(a.name ?? "").localeCompare(String(b.name ?? ""));
+      return scoreRecentReview(b) - scoreRecentReview(a);
+    });
+  }, [items, status, category, appliedKeyword, sortBy]);
 
   const grouped = useMemo(() => {
     return visibleItems.reduce<Record<string, LockerItem[]>>((acc, item) => {
@@ -160,12 +196,22 @@ export function LockerFilteredList({
             name="brand"
             value={keywordInput}
             onChange={(e) => setKeywordInput(e.target.value)}
-            placeholder={`${texts.brand}关键词`}
+            placeholder={l(`${texts.brand} keyword`, `${texts.brand}關鍵字`, `${texts.brand}关键词`)}
             className="ui-control-input min-w-[240px] flex-1"
           />
           <button type="button" onClick={() => setAppliedKeyword(keywordInput.trim())} className="brand-btn-primary h-10 px-4 text-[12px]">
-            筛选
+            {l("Filter", "篩選", "筛选")}
           </button>
+          <select
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value as "recent_review" | "avg_utility" | "used_times" | "name")}
+            className="ui-control-input h-10 min-w-[160px] text-[12px]"
+          >
+            <option value="recent_review">{l("Sort: Recent review", "排序：最近復盤", "排序：最近复盘")}</option>
+            <option value="avg_utility">{l("Sort: Avg utility", "排序：平均實用度", "排序：平均实用度")}</option>
+            <option value="used_times">{l("Sort: Used times", "排序：使用次數", "排序：使用次数")}</option>
+            <option value="name">{l("Sort: Name", "排序：名稱", "排序：名称")}</option>
+          </select>
           <button
             type="button"
             onClick={() => {
@@ -173,10 +219,11 @@ export function LockerFilteredList({
               setAppliedKeyword("");
               setStatus("all");
               setCategory("all");
+              setSortBy("recent_review");
             }}
             className="brand-btn-soft inline-flex h-10 items-center px-4 text-[12px]"
           >
-            清空
+            {l("Reset", "清空", "清空")}
           </button>
         </div>
         <p className={`ui-filter-hint mt-2 ${visibleItems.length === 0 ? "ui-filter-hint-empty" : ""}`}>{filterHint}</p>
@@ -229,6 +276,33 @@ export function LockerFilteredList({
                                     {containerLabel(log.container)}
                                   </p>
                                   {log.note ? <p>{l("Note: ", "備註：", "备注：")}{log.note}</p> : null}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        ) : null}
+                        {item.review_logs?.length ? (
+                          <details className="mt-1">
+                            <summary className="cursor-pointer text-[12px] text-[#6f6b62]">
+                              {reviewHistoryText} ({item.review_logs.length})
+                            </summary>
+                            <div className="mt-1 space-y-1 text-[12px] text-[#6f6b62]">
+                              {item.review_logs.map((log) => (
+                                <div key={`${item.id}:review:${log.trip_id}:${log.occurred_at ?? ""}`} className="rounded-[8px] border border-[#e6dfd2] px-2 py-1">
+                                  <a
+                                    href={`/trips/${log.trip_id}?lang=${lang}`}
+                                    className="text-[#3d3a33] underline-offset-2 hover:underline"
+                                    title={l("Open trip detail", "打開行程詳情", "打开行程详情")}
+                                  >
+                                    {log.trip_title}
+                                  </a>
+                                  <p>{log.trip_date}</p>
+                                  <p>
+                                    {l("Result: ", "結果：", "结果：")}
+                                    {reviewResultLabel(log.review_result)}
+                                    {typeof log.review_utility === "number" ? ` · ★${log.review_utility}` : ""}
+                                  </p>
+                                  {log.review_note ? <p>{l("Note: ", "備註：", "备注：")}{log.review_note}</p> : null}
                                 </div>
                               ))}
                             </div>

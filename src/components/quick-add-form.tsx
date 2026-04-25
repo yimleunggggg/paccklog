@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addTripItem } from "@/features/trips/actions";
 import { BrandSelect } from "@/components/brand-select";
+import { suggestWeightByName } from "@/lib/weight-hints";
 
 function QuickAddFormBusy({ children }: { children: React.ReactNode }) {
   const { pending } = useFormStatus();
@@ -41,6 +42,8 @@ export function QuickAddForm({
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
   const [note, setNote] = useState("");
+  const [weightG, setWeightG] = useState<number | "">("");
+  const [weightAutoFilled, setWeightAutoFilled] = useState(false);
   const [lastAdded, setLastAdded] = useState("");
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -61,6 +64,8 @@ export function QuickAddForm({
           setName("");
           setBrand("");
           setNote("");
+          setWeightG("");
+          setWeightAutoFilled(false);
           router.refresh();
         });
       }}
@@ -69,12 +74,23 @@ export function QuickAddForm({
       <QuickAddFormBusy>
         <input type="hidden" name="trip_id" value={tripId} />
         <input type="hidden" name="status" value={defaultStatus} />
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_130px_minmax(0,1fr)_minmax(0,1fr)_120px] lg:items-end">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_130px_minmax(0,1fr)_minmax(0,1fr)_120px_120px] lg:items-end">
           <input
             required
             name="name"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => {
+              const nextName = event.target.value;
+              setName(nextName);
+              const hint = suggestWeightByName(nextName);
+              if (hint && (weightG === "" || weightAutoFilled)) {
+                setWeightG(hint.weightG);
+                setWeightAutoFilled(true);
+              }
+              if (!hint && !nextName.trim()) {
+                setWeightAutoFilled(false);
+              }
+            }}
             placeholder={`+ ${quickAddPlaceholder}...`}
             className="ui-control-input h-11 rounded-xl sm:col-span-2 lg:col-span-1"
           />
@@ -121,6 +137,19 @@ export function QuickAddForm({
             placeholder={noteLabel}
             className="ui-control-input h-11 w-full rounded-[10px] text-[13px] sm:col-span-2 lg:col-span-1"
           />
+          <input
+            type="number"
+            min={0}
+            name="weight_g"
+            value={weightG}
+            onChange={(event) => {
+              const value = event.target.value;
+              setWeightG(value === "" ? "" : Number(value));
+              setWeightAutoFilled(false);
+            }}
+            placeholder="重量(g)"
+            className={`ui-control-input h-11 w-full rounded-[10px] text-[13px] ${weightAutoFilled ? "text-[#3a5c33]" : ""}`}
+          />
           <div className="w-full sm:max-w-[220px] lg:max-w-none">
             <button
               type="submit"
@@ -131,7 +160,7 @@ export function QuickAddForm({
             </button>
           </div>
         </div>
-        <p className="text-[12px] text-[#6f6b62]">{lastAdded}</p>
+        <p className="text-[12px] text-[#6f6b62]">{lastAdded || (weightAutoFilled ? "已自动填充参考重量，可手动修改。" : "")}</p>
       </QuickAddFormBusy>
     </form>
   );

@@ -60,6 +60,11 @@ function isMissingGearIdColumnError(error: unknown) {
   return message.includes("gear_id") && (message.includes("does not exist") || message.includes("column"));
 }
 
+function isMissingRelationError(error: unknown, relation: string) {
+  const message = typeof error === "object" && error && "message" in error ? String((error as { message?: string }).message ?? "") : "";
+  return message.toLowerCase().includes(relation.toLowerCase()) && message.toLowerCase().includes("does not exist");
+}
+
 async function hasSourceLockerIdColumn(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"]) {
   const { error } = await supabase.from("trip_items").select("id,source_locker_id").limit(1);
   if (!error) return true;
@@ -78,6 +83,29 @@ async function hasLockerGearIdColumn(supabase: Awaited<ReturnType<typeof require
   const { error } = await supabase.from("gear_locker").select("id,gear_id").limit(1);
   if (!error) return true;
   if (isMissingGearIdColumnError(error)) return false;
+  return true;
+}
+
+async function hasTripWeightColumns(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"]) {
+  const { error } = await supabase.from("trip_items").select("id,weight_g,weight_source").limit(1);
+  if (!error) return true;
+  const message = String((error as { message?: string })?.message ?? "");
+  if (message.includes("weight_g") || message.includes("weight_source")) return false;
+  return true;
+}
+
+async function hasTripReviewUtilityColumn(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"]) {
+  const { error } = await supabase.from("trip_items").select("id,review_utility").limit(1);
+  if (!error) return true;
+  const message = String((error as { message?: string })?.message ?? "");
+  if (message.includes("review_utility")) return false;
+  return true;
+}
+
+async function hasGearTripUsageLogsTable(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"]) {
+  const { error } = await supabase.from("gear_trip_usage_logs").select("id").limit(1);
+  if (!error) return true;
+  if (isMissingRelationError(error, "gear_trip_usage_logs")) return false;
   return true;
 }
 
@@ -489,6 +517,7 @@ export async function addTripItem(formData: FormData): Promise<{
 }> {
   const { supabase } = await requireUser();
   const tripItemGearIdColumnReady = await hasTripItemGearIdColumn(supabase);
+  const tripWeightColumnsReady = await hasTripWeightColumns(supabase);
   const tripId = String(formData.get("trip_id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const categoryRaw = String(formData.get("category") ?? "other");
@@ -498,6 +527,9 @@ export async function addTripItem(formData: FormData): Promise<{
   const container = String(formData.get("container") ?? "undecided");
   const brand = String(formData.get("brand") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
+  const weightRaw = String(formData.get("weight_g") ?? "").trim();
+  const parsedWeight = Number(weightRaw);
+  const weightG = Number.isFinite(parsedWeight) && parsedWeight >= 0 ? Math.round(parsedWeight) : null;
   const gearId = await ensureGearMasterId(supabase, { name, category, brand: brand || null, note: note || null });
 
   if (!tripId || !name) return { ok: false };
@@ -521,6 +553,7 @@ export async function addTripItem(formData: FormData): Promise<{
     sort_order: nextSortOrder,
     brand: brand || null,
     note: note || null,
+    ...(tripWeightColumnsReady ? { weight_g: weightG, weight_source: weightG !== null ? "user" : null } : {}),
   }).select("id,name,status,container").single();
 
   if (error || !inserted) return { ok: false };
@@ -862,17 +895,57 @@ export async function bulkOperateTripItems(formData: FormData): Promise<{ ok: bo
 }
 
 export async function setTripItemReview(formData: FormData) {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
+  const reviewUtilityColumnReady = await hasTripReviewUtilityColumn(supabase);
+  const usageLogReady = await hasGearTripUsageLogsTable(supabase);
   const id = String(formData.get("id") ?? "");
   const tripId = String(formData.get("trip_id") ?? "");
   const reviewResult = String(formData.get("review_result") ?? "skip");
   const reviewNote = String(formData.get("review_note") ?? "").trim();
+  const reviewUtilityRaw = String(formData.get("review_utility") ?? "").trim();
+  const reviewUtilityParsed = Number(reviewUtilityRaw);
+  const reviewUtility =
+    Number.isFinite(reviewUtilityParsed) && reviewUtilityParsed >= 1 && reviewUtilityParsed <= 5
+      ? Math.round(reviewUtilityParsed)
+      : null;
   if (!id) return;
   const { error } = await supabase
     .from("trip_items")
-    .update({ review_result: reviewResult, review_note: reviewNote || null })
+    .update({
+      review_result: reviewResult,
+      review_note: reviewNote || null,
+      ...(reviewUtilityColumnReady ? { review_utility: reviewUtility } : {}),
+    })
     .eq("id", id);
   if (error) return;
+
+  if (usageLogReady) {
+    const { data: tripItem } = await supabase
+      .from("trip_items")
+      .select("id,trip_id,gear_id,name,category,container,weight_g")
+      .eq("id", id)
+      .single();
+    if (tripItem) {
+      await supabase.from("gear_trip_usage_logs").upsert(
+        {
+          user_id: user.id,
+          trip_id: tripItem.trip_id ?? tripId,
+          trip_item_id: tripItem.id,
+          gear_id: tripItem.gear_id ?? null,
+          item_name: tripItem.name ?? "",
+          category: tripItem.category ?? null,
+          container: tripItem.container ?? null,
+          weight_g: tripItem.weight_g ?? null,
+          review_result: reviewResult,
+          review_utility: reviewUtility,
+          review_note: reviewNote || null,
+          occurred_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "trip_item_id" },
+      );
+    }
+  }
   revalidatePath(tripId ? `/trips/${tripId}` : "/");
 }
 

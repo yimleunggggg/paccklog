@@ -6,6 +6,13 @@ import { LockerFilteredList } from "@/components/locker-filtered-list";
 import { getItemCategoryOptions } from "@/shared/item-categories";
 import { hasCjkText } from "@/shared/localized-text";
 
+function normalizeNameKey(value: string | null | undefined) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
 export default async function LockerPage({
   searchParams,
 }: {
@@ -48,7 +55,7 @@ export default async function LockerPage({
   const brandKeyword = String(brand ?? "").trim();
   const { data: lockerItems } = await supabase
     .from("gear_locker")
-    .select("id,name,category,brand,note,status,times_used,created_at")
+    .select("id,name,gear_id,category,brand,note,status,times_used,created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
   const shouldAutoDetectLang = !rawLang;
@@ -72,6 +79,13 @@ export default async function LockerPage({
           .not("source_locker_id", "is", null)
           .order("updated_at", { ascending: false })
       : { data: [] as Array<{ trip_id: string; source_locker_id: string | null; status: string; container: string; note: string | null; updated_at: string | null }> };
+  const { data: usageLogsRows, error: usageLogsError } = await supabase
+    .from("gear_trip_usage_logs")
+    .select("gear_id,item_name,trip_id,review_result,review_utility,review_note,occurred_at")
+    .eq("user_id", user.id)
+    .order("occurred_at", { ascending: false })
+    .limit(800);
+  const hasUsageLogsTable = !usageLogsError;
   const tripTitleById = new Map((userTrips ?? []).map((trip) => [trip.id, { title: trip.title ?? "", start_date: trip.start_date, end_date: trip.end_date }]));
   const usageLogsByLockerId = new Map<
     string,
@@ -94,9 +108,48 @@ export default async function LockerPage({
     });
     usageLogsByLockerId.set(lockerId, current);
   });
+  const usageLogsByGearId = new Map<
+    string,
+    Array<{ trip_id: string; trip_title: string; trip_date: string; review_result: string | null; review_utility: number | null; review_note: string | null; occurred_at: string | null }>
+  >();
+  const usageLogsByItemName = new Map<
+    string,
+    Array<{ trip_id: string; trip_title: string; trip_date: string; review_result: string | null; review_utility: number | null; review_note: string | null; occurred_at: string | null }>
+  >();
+  if (hasUsageLogsTable) {
+    (usageLogsRows ?? []).forEach((row) => {
+      const trip = tripTitleById.get(row.trip_id);
+      const tripDate = trip?.start_date && trip?.end_date ? `${trip.start_date} ~ ${trip.end_date}` : "";
+      const log = {
+        trip_id: row.trip_id,
+        trip_title: trip?.title ?? row.trip_id,
+        trip_date: tripDate,
+        review_result: row.review_result,
+        review_utility: row.review_utility,
+        review_note: row.review_note,
+        occurred_at: row.occurred_at,
+      };
+      const gearId = String(row.gear_id ?? "");
+      if (gearId) {
+        const current = usageLogsByGearId.get(gearId) ?? [];
+        current.push(log);
+        usageLogsByGearId.set(gearId, current);
+      }
+      const nameKey = normalizeNameKey(row.item_name);
+      if (nameKey) {
+        const current = usageLogsByItemName.get(nameKey) ?? [];
+        current.push(log);
+        usageLogsByItemName.set(nameKey, current);
+      }
+    });
+  }
   const lockerItemsWithLogs = (lockerItems ?? []).map((item) => ({
     ...item,
     usage_logs: usageLogsByLockerId.get(item.id)?.slice(0, 5) ?? [],
+    review_logs:
+      (item.gear_id ? usageLogsByGearId.get(item.gear_id) : undefined)?.slice(0, 5) ??
+      usageLogsByItemName.get(normalizeNameKey(item.name))?.slice(0, 5) ??
+      [],
   }));
 
   return (

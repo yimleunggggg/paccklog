@@ -8,7 +8,6 @@ import { TripContainerGroups } from "@/components/trip-container-groups";
 import { TripShareActions } from "@/components/trip-share-actions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveLang, texts } from "@/shared/i18n";
-import { getTripWeather } from "@/lib/weather";
 import { getItemCategoryOptions } from "@/shared/item-categories";
 import { localeForLang, pickLangText } from "@/shared/localized-text";
 
@@ -23,7 +22,7 @@ function formatDateRange(start: string | null, end: string | null, lang: string)
 
 type TripDetailPageProps = {
   params: Promise<{ tripId: string }>;
-  searchParams: Promise<{ status?: string; view?: string; mode?: string; lang?: string; container?: string }>;
+  searchParams: Promise<{ status?: string; view?: string; mode?: string; lang?: string; container?: string; review_category?: string; review_container?: string }>;
 };
 
 export default async function TripDetailPage({ params, searchParams }: TripDetailPageProps) {
@@ -35,6 +34,8 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
   const lang = resolveLang(query.lang);
   const allowedContainers = new Set(["undecided", "suitcase", "backpack", "carry_on", "wear"]);
   const containerFilter = query.container && allowedContainers.has(query.container) ? query.container : "";
+  const reviewCategoryFilter = String(query.review_category ?? "all");
+  const reviewContainerFilter = String(query.review_container ?? "all");
   const t = texts[lang];
   const l = (en: string, zhTW: string, zhCN: string) => pickLangText(lang, { en, zhTW, zhCN });
   const supabase = await createSupabaseServerClient();
@@ -112,7 +113,6 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
   const categoryViewLabel = t.categoryView?.trim() || l("Category view", "分類視圖", "分类视图");
   const containerViewLabel = t.containerView?.trim() || l("By container", "按容器", "按容器");
   const allViewLabel = l("All view", "全部視圖", "全局视图");
-  const rainLabel = l("Rain", "降雨", "降雨");
   const categoryDistributionLabel = l("Category distribution", "分類分布", "分类分布");
   const containerDistributionLabel = l("Container distribution", "容器分布", "容器分布");
   const packedRatioLabel = l("Packed ratio", "已打包進度", "已打包进度");
@@ -160,9 +160,6 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
           : lang === "zh-TW"
             ? `顯示全部 ${allItems.length} 件物品`
             : `显示全部 ${allItems.length} 件物品`;
-  const country = trip?.tags?.[1];
-  const cityTagRaw = trip?.tags?.[2] ?? "";
-  const city = cityTagRaw.split("/")[0]?.trim() || cityTagRaw.split("、")[0]?.trim() || cityTagRaw;
   const cleanTags = (trip?.tags ?? []).filter((tag: string) => tag !== "__pinned");
   const continentTag = cleanTags[0] ?? "";
   const countryTag = cleanTags[1] ?? "";
@@ -171,8 +168,6 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
   const durationTag = cleanTags[4] ?? "";
   const seasonTag = cleanTags[5] ?? "";
   const styleTag = cleanTags[6] ?? "";
-  const hasWeatherInputs = Boolean(city && trip?.start_date && trip?.end_date);
-  const weather = hasWeatherInputs ? await getTripWeather(city, country, trip?.start_date, trip?.end_date, lang) : null;
   const normalizedDescription = (() => {
     const raw = (trip?.description ?? "").trim();
     if (!raw) return "";
@@ -183,12 +178,11 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
     const autoHintLine = lines.find((line: string) => /^(装备建议|裝備建議|Gear suggestion)/i.test(line));
     const userLines = lines.filter((line: string) => !/^(装备建议|裝備建議|Gear suggestion)/i.test(line));
     const fallbackHint =
-      weather?.suggestion ??
-      (lang === "en"
-        ? "Pack a lightweight setup and check the latest forecast before departure."
+      lang === "en"
+        ? "Pack a lightweight setup and review your key items before departure."
         : lang === "zh-TW"
-          ? "建議按輕量化裝備準備，並在出發前查看最新天氣。"
-          : "建议按轻量化装备准备，并在出发前查看最新天气。");
+          ? "建議按輕量化裝備準備，並在出發前再檢查一次關鍵物品。"
+          : "建议按轻量化装备准备，并在出发前再检查一次关键物品。";
     const localizedAutoHint =
       lang === "en"
         ? `Gear suggestion: ${fallbackHint}`
@@ -203,6 +197,71 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
     label: containerMeta[key] ?? key,
     count: (items ?? []).filter((item) => item.container === key).length,
   }));
+  const totalWeightG = (items ?? []).reduce((sum, item) => sum + (Number(item.weight_g) || 0), 0);
+  const weightByCategory = Object.entries(
+    (items ?? []).reduce<Record<string, number>>((acc, item) => {
+      const key = item.category ?? "other";
+      acc[key] = (acc[key] ?? 0) + (Number(item.weight_g) || 0);
+      return acc;
+    }, {}),
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+  const canReviewTrip = trip?.status === "done" || trip?.status === "completed";
+  const reviewedItems = (allItems ?? []).filter((item) => item.review_result && item.review_result !== "skip");
+  const reviewFilteredItems = reviewedItems.filter((item) => {
+    const categoryOk = reviewCategoryFilter === "all" ? true : item.category === reviewCategoryFilter;
+    const containerOk = reviewContainerFilter === "all" ? true : item.container === reviewContainerFilter;
+    return categoryOk && containerOk;
+  });
+  const avgReviewUtility = (() => {
+    const values = reviewFilteredItems
+      .map((item) => Number(item.review_utility))
+      .filter((v) => Number.isFinite(v) && v > 0);
+    if (!values.length) return null;
+    return values.reduce((sum, v) => sum + v, 0) / values.length;
+  })();
+  const reviewCategoryOptions = ["all", ...Array.from(new Set(reviewedItems.map((item) => String(item.category ?? "other"))))];
+  const reviewContainerOptions = ["all", ...Array.from(new Set(reviewedItems.map((item) => String(item.container ?? "undecided"))))];
+  const aiReviewSummary = (() => {
+    if (!reviewFilteredItems.length) {
+      return l(
+        "No reviewed items yet. Complete post-trip review to unlock personalized suggestions.",
+        "尚無復盤資料，完成行後復盤後即可獲得個人化建議。",
+        "暂无复盘数据，完成行后复盘后即可获得个性化建议。",
+      );
+    }
+    const dropped = reviewFilteredItems.filter((item) => item.review_result === "unused").length;
+    const missed = reviewFilteredItems.filter((item) => item.review_result === "missed").length;
+    const kept = reviewFilteredItems.filter((item) => item.review_result === "used").length;
+    const topDropCategory = Object.entries(
+      reviewFilteredItems.reduce<Record<string, number>>((acc, item) => {
+        if (item.review_result !== "unused") return acc;
+        const key = String(item.category ?? "other");
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {}),
+    ).sort((a, b) => b[1] - a[1])[0];
+    const topMissedCategory = Object.entries(
+      reviewFilteredItems.reduce<Record<string, number>>((acc, item) => {
+        if (item.review_result !== "missed") return acc;
+        const key = String(item.category ?? "other");
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {}),
+    ).sort((a, b) => b[1] - a[1])[0];
+    const dropText = topDropCategory
+      ? `${categoryMeta[topDropCategory[0]] ?? topDropCategory[0]} ${topDropCategory[1]}${l(" items", " 件", " 件")}`
+      : l("none", "無", "无");
+    const missText = topMissedCategory
+      ? `${categoryMeta[topMissedCategory[0]] ?? topMissedCategory[0]} ${topMissedCategory[1]}${l(" items", " 件", " 件")}`
+      : l("none", "無", "无");
+    return l(
+      `Reviewed ${reviewFilteredItems.length} items: kept ${kept}, dropped ${dropped}, missed ${missed}. Drop-heavy category: ${dropText}. Miss-heavy category: ${missText}.`,
+      `已復盤 ${reviewFilteredItems.length} 件：保留 ${kept}、帶了沒用 ${dropped}、沒帶後悔 ${missed}。淘汰集中在 ${dropText}；補帶需求集中在 ${missText}。`,
+      `已复盘 ${reviewFilteredItems.length} 件：保留 ${kept}、带了没用 ${dropped}、没带后悔 ${missed}。淘汰集中在 ${dropText}；补带需求集中在 ${missText}。`,
+    );
+  })();
   return (
     <main className="packlog-page mx-auto w-full max-w-[1260px] p-4 pb-24 md:p-6 md:pb-6">
       <div className="xl:grid xl:grid-cols-[220px_1fr_280px] xl:gap-6">
@@ -295,39 +354,6 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
         </form>
       ) : null}
 
-      <section className="mb-6 rounded-[12px] border border-[#d8d0c4] bg-[#fefcf8] px-4 py-3 text-[#2f3f2f]">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="text-[12px] tracking-[0.08em] text-[#6b695f]">{t.weatherTitle}</p>
-          <p className="text-[11px] text-[#8c8880]">
-            {t.weatherSource}: {weather?.source ?? "--"}
-          </p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-[180px_1fr]">
-          <div className="rounded-[10px] border border-[#e5ddd0] bg-[#f5f1ea] px-3 py-3">
-            <p className="text-[28px] leading-none text-[#1f2c1f]" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>
-              {weather?.avgTempC ?? "--"}°
-            </p>
-            <p className="mt-1 text-[11px] text-[#7a766d]">
-              {weather?.minTempC ?? "--"}° ~ {weather?.maxTempC ?? "--"}°
-            </p>
-            <p className="mt-2 text-[11px] text-[#7a766d]">
-              {rainLabel}: {weather?.rainSumMm ?? "--"}mm
-            </p>
-          </div>
-          <div className="rounded-[10px] border border-[#e5ddd0] bg-[#f8f5ef] px-3 py-3">
-            <p className="mb-1 text-[12px] text-[#5d695d]">{t.smartSuggestion}</p>
-            <p className="text-[12px] leading-relaxed text-[#4f5a4f]">
-              {weather?.suggestion ?? t.weatherReferenceHint}
-            </p>
-            {weather?.isEstimated ? (
-              <p className="mt-2 text-[11px] text-[#7a766d]">
-                {t.weatherEstimatedHint}
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="mr-1 text-[13px] text-muted-foreground">{t.checklistView}</span>
         {statusFilters.map((s) => (
@@ -394,6 +420,62 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
           <p className="mt-1 text-[12px] text-[#4a4840]">{packed}/{total} · {progress}%</p>
         </div>
       </section>
+      {canReviewTrip ? (
+        <section className="mb-4 rounded-[12px] border border-[#d8d0c4] bg-[#fefcf8] px-3 py-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] tracking-[0.08em] text-[#8c8880]">
+              {l("Post-trip review", "行後復盤", "行后复盘")}
+            </p>
+            <p className="text-[12px] text-[#6f6b62]">
+              {l("Reviewed", "已復盤", "已复盘")} {reviewFilteredItems.length}/{allItems.length}
+              {avgReviewUtility ? ` · ★ ${avgReviewUtility.toFixed(1)}` : ""}
+            </p>
+          </div>
+          <div className="mb-2 flex flex-wrap gap-2">
+            <span className="text-[11px] text-[#8c8880]">{l("Filter", "篩選", "筛选")}:</span>
+            {reviewCategoryOptions.map((value) => (
+              <Link
+                key={`review-category-${value}`}
+                href={`/trips/${tripId}?status=${statusFilter}&view=${view}&lang=${lang}&review_category=${value}&review_container=${reviewContainerFilter}`}
+                className={`brand-chip ${reviewCategoryFilter === value ? "brand-chip-active" : ""}`}
+              >
+                {value === "all" ? l("All categories", "全部分類", "全部分类") : categoryMeta[value] ?? value}
+              </Link>
+            ))}
+          </div>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {reviewContainerOptions.map((value) => (
+              <Link
+                key={`review-container-${value}`}
+                href={`/trips/${tripId}?status=${statusFilter}&view=${view}&lang=${lang}&review_category=${reviewCategoryFilter}&review_container=${value}`}
+                className={`brand-chip ${reviewContainerFilter === value ? "brand-chip-active" : ""}`}
+              >
+                {value === "all" ? l("All locations", "全部位置", "全部位置") : containerMeta[value] ?? value}
+              </Link>
+            ))}
+          </div>
+          <div className="grid gap-2 sm:grid-cols-4">
+            <div className="rounded-[10px] border border-[#e6dfd2] bg-white px-3 py-2 text-[12px] text-[#3a5c33]">
+              {t.reviewUsed}: {reviewFilteredItems.filter((item) => item.review_result === "used").length}
+            </div>
+            <div className="rounded-[10px] border border-[#e6dfd2] bg-white px-3 py-2 text-[12px] text-[#8a6a2f]">
+              {t.reviewUnused}: {reviewFilteredItems.filter((item) => item.review_result === "unused").length}
+            </div>
+            <div className="rounded-[10px] border border-[#e6dfd2] bg-white px-3 py-2 text-[12px] text-[#8a4f39]">
+              {t.reviewMissed}: {reviewFilteredItems.filter((item) => item.review_result === "missed").length}
+            </div>
+            <div className="rounded-[10px] border border-[#e6dfd2] bg-white px-3 py-2 text-[12px] text-[#7a766d]">
+              {t.reviewSkip}: {reviewFilteredItems.filter((item) => item.review_result === "skip").length}
+            </div>
+          </div>
+          <div className="mt-3 rounded-[10px] border border-[#e6dfd2] bg-[#f6f2ea] px-3 py-2 text-[12px] leading-relaxed text-[#4a4840]">
+            <p className="mb-1 text-[11px] tracking-[0.08em] text-[#8c8880]">
+              {l("AI review insight (phase 1)", "AI 復盤洞察（第一階段）", "AI 复盘洞察（第一阶段）")}
+            </p>
+            {aiReviewSummary}
+          </div>
+        </section>
+      ) : null}
       <section className="mb-5 rounded-xl border border-[#d8d0c4] bg-[#fefcf8] p-3">
         <div className="mb-2 flex justify-end">
           <LockerPickerSheet
@@ -550,12 +632,33 @@ export default async function TripDetailPage({ params, searchParams }: TripDetai
               </div>
             </section>
             <section className="rounded-[14px] border border-[#d8d0c4] bg-[#fefcf8] p-3">
-              <p className="mb-2 text-[11px] tracking-[0.1em] text-[#8c8880]">$ {t.climatePanel.toUpperCase()}</p>
-              <p className="text-[30px] leading-none" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>
-                {weather?.minTempC ?? "--"}°—{weather?.maxTempC ?? "--"}°
+              <p className="mb-2 text-[11px] tracking-[0.1em] text-[#8c8880]">$ {l("MASS DISTRIBUTION", "重量分布", "重量分布")}</p>
+              <p className="text-[28px] leading-none" style={{ fontFamily: "EB Garamond, serif", fontStyle: "italic" }}>
+                {(totalWeightG / 1000).toFixed(2)}kg
               </p>
-              <p className="mt-1 text-xs text-[#6b695f]">{weather?.locationLabel ?? `${city ?? ""} ${country ?? ""}`.trim()}</p>
-              <p className="mt-2 text-xs text-[#8c8880]">{t.weatherSource}：{weather?.source ?? "Open-Meteo"}</p>
+              <p className="mt-1 text-xs text-[#8c8880]">
+                {l(
+                  "Based on item-level recorded weight.",
+                  "基於條目層級已記錄重量。",
+                  "基于条目级已记录重量。",
+                )}
+              </p>
+              <div className="mt-3 space-y-1.5">
+                {weightByCategory.length ? (
+                  weightByCategory.map(([category, weight]) => (
+                    <div key={category} className="flex items-center justify-between text-xs">
+                      <span className="text-[#6b695f]">{categoryMeta[category] ?? category}</span>
+                      <span className="font-mono text-[#2f2d29]">
+                        {(weight / 1000).toFixed(2)}kg · {totalWeightG > 0 ? Math.round((weight / totalWeightG) * 100) : 0}%
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-[#8c8880]">
+                    {l("No weight data yet. Add weight when creating items.", "暫無重量資料，新增條目時可補充重量。", "暂无重量数据，新增条目时可补充重量。")}
+                  </p>
+                )}
+              </div>
             </section>
           </div>
         </aside>
